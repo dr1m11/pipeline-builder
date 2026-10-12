@@ -1,5 +1,14 @@
 export { assertNever } from './assert-never';
 export { type Position } from './geometry';
+export {
+  connect,
+  type ConnectedPorts,
+  type ConnectionCandidate,
+  type ConnectionError,
+  type ConnectResult,
+  validateConnection,
+} from './graph/connections';
+export { addNode, findNode, moveNodes, removeElements } from './graph/nodes';
 export { type ConditionNodeData, type ConditionOperator } from './nodes/condition';
 export { type InputNodeData, type InputValueType } from './nodes/input';
 export { type LlmCallNodeData } from './nodes/llm-call';
