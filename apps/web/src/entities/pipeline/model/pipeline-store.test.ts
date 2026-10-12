@@ -135,6 +135,55 @@ describe('createPipelineStore', () => {
     expect(store.getState().pipeline.edges.map((edge) => edge.id)).toEqual(['prompt-llm']);
   });
 
+  it('tells which ports can be connected', () => {
+    const { store } = storeWithListener();
+    const { canConnect } = store.getState();
+
+    expect(
+      canConnect({ source: 'prompt', sourcePort: 'prompt', target: 'llm', targetPort: 'system' }),
+    ).toBe(true);
+    // An occupied input can be connected: the new edge replaces the old one.
+    expect(
+      canConnect({ source: 'input', sourcePort: 'value', target: 'llm', targetPort: 'prompt' }),
+    ).toBe(true);
+    expect(
+      canConnect({ source: 'llm', sourcePort: 'response', target: 'llm', targetPort: 'system' }),
+    ).toBe(false);
+    expect(
+      canConnect({ source: 'input', sourcePort: 'value', target: 'llm', targetPort: 'missing' }),
+    ).toBe(false);
+  });
+
+  it('connects ports with an edge of a generated id', () => {
+    const { store } = storeWithListener();
+
+    store
+      .getState()
+      .connect({ source: 'prompt', sourcePort: 'prompt', target: 'llm', targetPort: 'system' });
+
+    expect(store.getState().pipeline.edges.at(-1)).toEqual({
+      id: 'new',
+      source: 'prompt',
+      sourcePort: 'prompt',
+      target: 'llm',
+      targetPort: 'system',
+    });
+  });
+
+  it('replaces the edge of an occupied input and forgets its selection', () => {
+    const { store } = storeWithListener();
+    store.getState().updateSelection({ edges: new Map([['prompt-llm', true]]) });
+
+    store
+      .getState()
+      .connect({ source: 'input', sourcePort: 'value', target: 'llm', targetPort: 'prompt' });
+
+    const state = store.getState();
+    expect(state.pipeline.edges.map((edge) => edge.id)).toEqual(['input-prompt', 'new']);
+    expect(state.pipeline.edges[1]).toMatchObject({ source: 'input', target: 'llm' });
+    expect(state.selectedEdgeIds.size).toBe(0);
+  });
+
   it('selects and deselects nodes and edges', () => {
     const { store } = storeWithListener();
 
@@ -177,6 +226,13 @@ describe('createPipelineStore', () => {
     actions.moveNodes(new Map([['input', { x: 0, y: 0 }]]));
     actions.moveNodes(new Map([['missing', { x: 5, y: 5 }]]));
     actions.removeElements({ nodeIds: ['missing'], edgeIds: ['missing'] });
+    actions.connect({
+      source: 'input',
+      sourcePort: 'value',
+      target: 'prompt',
+      targetPort: 'question',
+    });
+    actions.connect({ source: 'llm', sourcePort: 'response', target: 'llm', targetPort: 'system' });
     actions.updateSelection({ nodes: new Map([['input', true]]), edges: new Map() });
     actions.updateSelection({ nodes: new Map([['prompt', false]]) });
     actions.setMeasured(new Map([['input', { width: 240, height: 96 }]]));

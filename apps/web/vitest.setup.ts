@@ -54,6 +54,11 @@ if (!('DOMMatrixReadOnly' in globalThis)) {
     value: DOMMatrixReadOnlyShim,
   });
 }
+// With no layout, no element is under any point. React Flow's click-to-connect asks for the handle
+// under the pointer and falls back to the handle that was clicked.
+if (!('elementFromPoint' in document)) {
+  Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => null });
+}
 // Deliberately global: React Flow skips nodes that measure 0×0, and no other component under test
 // reads offset sizes.
 Object.defineProperties(HTMLElement.prototype, {

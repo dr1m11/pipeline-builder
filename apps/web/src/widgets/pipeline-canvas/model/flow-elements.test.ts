@@ -73,8 +73,13 @@ describe('toFlowNodes', () => {
 });
 
 describe('toFlowEdges', () => {
-  it('connects port handles and shows selection', () => {
-    expect(toFlowEdges([edge], new Set(['edge']))).toEqual([
+  const pipeline = {
+    ...createEmptyPipeline({ id: 'draft', name: 'Test' }),
+    nodes: [input, prompt],
+  };
+
+  it('connects port handles, names the edge after its ports and shows selection', () => {
+    expect(toFlowEdges({ ...pipeline, edges: [edge] }, new Set(['edge']))).toEqual([
       {
         id: 'edge',
         source: 'input',
@@ -82,14 +87,43 @@ describe('toFlowEdges', () => {
         target: 'prompt',
         targetHandle: 'question',
         selected: true,
+        className: 'edge-text',
+        ariaLabel: 'Input 1 value to Prompt 1 question',
       },
     ]);
   });
 
-  it('reuses the object of an edge until its selection changes', () => {
-    const [before] = toFlowEdges([edge], new Set());
+  it('colours an edge by the type of its source port', () => {
+    const numberInput = { ...input, data: { ...input.data, valueType: 'number' as const } };
+    const [flowEdge] = toFlowEdges(
+      { ...pipeline, nodes: [numberInput, prompt], edges: [edge] },
+      new Set(),
+    );
 
-    expect(toFlowEdges([edge], new Set())[0]).toBe(before);
-    expect(toFlowEdges([edge], new Set(['edge']))[0]).not.toBe(before);
+    expect(flowEdge?.className).toBe('edge-number');
+  });
+
+  it('falls back to ids for a port the pipeline does not have', () => {
+    const [flowEdge] = toFlowEdges(
+      { ...pipeline, edges: [{ ...edge, target: 'gone', targetPort: 'topic' }] },
+      new Set(),
+    );
+
+    expect(flowEdge?.ariaLabel).toBe('Input 1 value to gone topic');
+  });
+
+  it('reuses the object of an edge until its selection or its ports change', () => {
+    const [before] = toFlowEdges({ ...pipeline, edges: [edge] }, new Set());
+
+    const moved = moveNodes(
+      { ...pipeline, edges: [edge] },
+      new Map([['prompt', { x: 400, y: 0 }]]),
+    );
+    expect(toFlowEdges(moved, new Set())[0]).toBe(before);
+    expect(toFlowEdges({ ...pipeline, edges: [edge] }, new Set(['edge']))[0]).not.toBe(before);
+
+    const renamed = { ...prompt, label: 'Ask' };
+    const [after] = toFlowEdges({ ...pipeline, nodes: [input, renamed], edges: [edge] }, new Set());
+    expect(after?.ariaLabel).toBe('Input 1 value to Ask question');
   });
 });

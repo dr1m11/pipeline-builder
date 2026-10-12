@@ -1,4 +1,13 @@
-import type { PipelineEdge, PipelineNode, Position } from '@pipeline-builder/core';
+import {
+  findNode,
+  getNodePorts,
+  type Pipeline,
+  type PipelineEdge,
+  type PipelineNode,
+  type PortDefinition,
+  type PortType,
+  type Position,
+} from '@pipeline-builder/core';
 import type { Edge } from '@xyflow/react';
 
 import { type PipelineFlowNode, toFlowNode } from '@/entities/node';
@@ -24,8 +33,18 @@ interface CachedNode {
 
 interface CachedEdge {
   readonly selected: boolean;
+  readonly className: string;
+  readonly ariaLabel: string;
   readonly flowEdge: PipelineFlowEdge;
 }
+
+// Edges are coloured like the ports they leave; app/styles/tokens.css styles these classes.
+const EDGE_CLASSES: Record<PortType, string> = {
+  text: 'edge-text',
+  number: 'edge-number',
+  json: 'edge-json',
+  any: 'edge-any',
+};
 
 // React Flow re-renders a node whenever it receives a new object for it. Core keeps unchanged
 // domain nodes and edges identical, so caching the derived object per domain object means a store
@@ -53,15 +72,32 @@ export function toFlowNodes(source: FlowNodesSource): PipelineFlowNode[] {
   });
 }
 
-/** Derives React Flow edges, reusing the object of every edge whose inputs have not changed. */
+/**
+ * Derives React Flow edges, coloured by the type of their source port and named after the ports
+ * they join ("Input 1 value to Prompt 1 question"). The object of every edge whose inputs have not
+ * changed is reused.
+ */
 export function toFlowEdges(
-  edges: readonly PipelineEdge[],
+  pipeline: Pipeline,
   selectedEdgeIds: ReadonlySet<string>,
 ): PipelineFlowEdge[] {
-  return edges.map((edge) => {
+  return pipeline.edges.map((edge) => {
+    const source = findNode(pipeline, edge.source);
+    const target = findNode(pipeline, edge.target);
+    const sourcePort = source && getNodePorts(source).outputs.find((p) => p.id === edge.sourcePort);
+    const targetPort = target && getNodePorts(target).inputs.find((p) => p.id === edge.targetPort);
+
     const selected = selectedEdgeIds.has(edge.id);
+    const className = EDGE_CLASSES[sourcePort?.type ?? 'any'];
+    const ariaLabel = `${endpointName(source, sourcePort, edge.source, edge.sourcePort)} to ${endpointName(target, targetPort, edge.target, edge.targetPort)}`;
     const cached = edgeCache.get(edge);
-    if (cached?.selected === selected) return cached.flowEdge;
+    if (
+      cached?.selected === selected &&
+      cached.className === className &&
+      cached.ariaLabel === ariaLabel
+    ) {
+      return cached.flowEdge;
+    }
     const flowEdge: PipelineFlowEdge = {
       id: edge.id,
       source: edge.source,
@@ -69,8 +105,20 @@ export function toFlowEdges(
       target: edge.target,
       targetHandle: edge.targetPort,
       selected,
+      className,
+      ariaLabel,
     };
-    edgeCache.set(edge, { selected, flowEdge });
+    edgeCache.set(edge, { selected, className, ariaLabel, flowEdge });
     return flowEdge;
   });
+}
+
+/** "Prompt 1 question"; ids stand in for a node or port the pipeline no longer has. */
+function endpointName(
+  node: PipelineNode | undefined,
+  port: PortDefinition | undefined,
+  nodeId: string,
+  portId: string,
+): string {
+  return `${node?.label ?? nodeId} ${port?.label ?? portId}`;
 }

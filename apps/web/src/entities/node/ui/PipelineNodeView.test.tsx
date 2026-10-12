@@ -36,7 +36,7 @@ function renderOnCanvas(nodes: PipelineNode[]) {
   );
 }
 
-// Connecting ports needs document.elementFromPoint, which jsdom lacks: see the Storybook stories.
+// Connecting ports is covered with the canvas that guards it (widgets/pipeline-canvas).
 describe('PipelineNodeView', () => {
   it('shows the label, a summary and every port with its type', async () => {
     renderOnCanvas([node('llm-call', 'LLM Call 1')]);
