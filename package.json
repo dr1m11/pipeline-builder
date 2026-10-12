@@ -15,8 +15,11 @@
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json && pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "test:hooks": "node --test \".claude/hooks/*.test.mjs\"",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:hooks",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:hooks",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -24,6 +27,7 @@
     "@commitlint/config-conventional": "21.2.3",
     "@eslint/js": "10.0.1",
     "@types/node": "catalog:",
+    "@vitest/coverage-v8": "5.0.4",
     "eslint": "10.12.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-simple-import-sort": "14.0.0",
@@ -32,6 +36,7 @@
     "lint-staged": "17.6.0",
     "prettier": "3.9.10",
     "typescript": "catalog:",
-    "typescript-eslint": "8.71.1"
+    "typescript-eslint": "8.71.1",
+    "vitest": "5.0.4"
   }
 }
