@@ -1,7 +1,13 @@
 // @ts-check
 import js from '@eslint/js';
+import eslintReact from '@eslint-react/eslint-plugin';
+import vitest from '@vitest/eslint-plugin';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import prettier from 'eslint-config-prettier/flat';
+import jsxA11y from 'eslint-plugin-jsx-a11y-x';
+import playwright from 'eslint-plugin-playwright';
+import reactHooks from 'eslint-plugin-react-hooks';
+import { reactRefresh } from 'eslint-plugin-react-refresh';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -54,6 +60,24 @@ export default defineConfig(
     // Tools that load their config through a default export.
     files: ['**/*.config.{js,mjs,ts,mts}', '**/.storybook/**', '**/*.stories.tsx'],
     rules: { 'no-restricted-syntax': 'off' },
+  },
+  {
+    files: ['apps/web/src/**/*.{ts,tsx}'],
+    extends: [
+      eslintReact.configs['recommended-type-checked'],
+      reactHooks.configs.flat['recommended-latest'],
+      reactRefresh.configs.vite(),
+      jsxA11y.configs.recommended,
+    ],
+    languageOptions: { globals: globals.browser },
+  },
+  {
+    files: ['**/*.test.{ts,tsx}'],
+    extends: [vitest.configs.recommended],
+  },
+  {
+    files: ['apps/web/e2e/**/*.ts'],
+    extends: [playwright.configs['flat/recommended']],
   },
   {
     files: ['packages/core/**/*.ts'],

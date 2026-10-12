@@ -11,11 +11,12 @@ export default defineConfig({
           environment: 'node',
         },
       },
+      'apps/web/vitest.config.ts',
     ],
     coverage: {
       provider: 'v8',
-      include: ['packages/core/src/**/*.ts'],
-      exclude: ['**/*.test.ts', '**/index.ts'],
+      include: ['packages/core/src/**/*.ts', 'apps/web/src/**/*.{ts,tsx}'],
+      exclude: ['**/*.test.{ts,tsx}', '**/*.stories.tsx', '**/index.ts', 'apps/web/src/main.tsx'],
       reporter: ['text', 'html', 'json-summary', 'json'],
       reportOnFailure: true,
       thresholds: {

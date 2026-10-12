@@ -10,3 +10,13 @@ catalog:
 
 engineStrict: true
 saveExact: true
+
+overrides:
+  # eslint-plugin-react-hooks 7.1.1 imports `zod-validation-error/v4` but its range also allows 3.x,
+  # which has no such entry point. Remove once the plugin tightens its range.
+  eslint-plugin-react-hooks>zod-validation-error: 4.0.2
+
+peerDependencyRules:
+  allowedVersions:
+    # tsconfck (via @feature-sliced/steiger-plugin) only parses tsconfig files; TS 6 is fine.
+    tsconfck>typescript: '6'
