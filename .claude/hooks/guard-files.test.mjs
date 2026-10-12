@@ -36,7 +36,10 @@ describe('projectRelative', () => {
   const root = path.resolve('/repo');
 
   it('returns POSIX paths relative to the project root', () => {
-    assert.equal(projectRelative(path.join(root, 'apps', 'web', 'src', 'main.tsx'), root), 'apps/web/src/main.tsx');
+    assert.equal(
+      projectRelative(path.join(root, 'apps', 'web', 'src', 'main.tsx'), root),
+      'apps/web/src/main.tsx',
+    );
   });
 
   it('returns null for files outside the project', () => {

@@ -1,0 +1,2 @@
+# Prettier also respects .gitignore
+pnpm-lock.yaml

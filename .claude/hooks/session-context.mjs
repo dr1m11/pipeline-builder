@@ -5,12 +5,18 @@ import path from 'node:path';
 
 import { git, isMain, PROJECT_DIR, readInput } from './_lib.mjs';
 
-/** Reads the `<!-- current-stage: A1 -->` marker from docs/roadmap.md. */
+/**
+ * Reads the `<!-- current-stage: A1 -->` marker from docs/roadmap.md.
+ * @param {string} roadmap
+ */
 export function currentStage(roadmap) {
   return /<!--\s*current-stage:\s*([\w.-]+)\s*-->/.exec(roadmap)?.[1] ?? null;
 }
 
-/** Summarizes `git status --porcelain` output as "2 staged, 1 modified, 3 untracked". */
+/**
+ * Summarizes `git status --porcelain` output as "2 staged, 1 modified, 3 untracked".
+ * @param {string} porcelain
+ */
 export function summarizeStatus(porcelain) {
   const counts = { staged: 0, modified: 0, untracked: 0 };
   for (const line of porcelain.split(/\r?\n/).filter(Boolean)) {
@@ -28,11 +34,15 @@ export function summarizeStatus(porcelain) {
 }
 
 function openPullRequest() {
-  const result = spawnSync('gh', ['pr', 'view', '--json', 'number,state,url', '-q', '"#\\(.number) \\(.state) \\(.url)"'], {
-    cwd: PROJECT_DIR,
-    encoding: 'utf8',
-    timeout: 3000,
-  });
+  const result = spawnSync(
+    'gh',
+    ['pr', 'view', '--json', 'number,state,url', '-q', '"#\\(.number) \\(.state) \\(.url)"'],
+    {
+      cwd: PROJECT_DIR,
+      encoding: 'utf8',
+      timeout: 3000,
+    },
+  );
   return result.status === 0 ? result.stdout.trim().replace(/^"|"$/g, '') : null;
 }
 
@@ -45,9 +55,13 @@ if (isMain(import.meta.url)) {
   if (branch) {
     const counts = git(['rev-list', '--left-right', '--count', '@{upstream}...HEAD']);
     const [behind, ahead] = counts ? counts.split(/\s+/) : [];
-    lines.push(`- Branch: ${branch}${counts ? ` (ahead ${ahead}, behind ${behind} of upstream)` : ' (no upstream)'}`);
+    lines.push(
+      `- Branch: ${branch}${counts ? ` (ahead ${ahead}, behind ${behind} of upstream)` : ' (no upstream)'}`,
+    );
     if (branch === 'main' && hasOrigin) {
-      lines.push('- ⚠ On main: create a branch (`git switch -c <type>/<kebab-summary>`) before committing.');
+      lines.push(
+        '- ⚠ On main: create a branch (`git switch -c <type>/<kebab-summary>`) before committing.',
+      );
     }
   }
 

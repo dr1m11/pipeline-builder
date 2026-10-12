@@ -1,8 +1,8 @@
 ---
 paths:
-  - "**/*.stories.tsx"
-  - "**/*.mdx"
-  - "apps/web/.storybook/**"
+  - '**/*.stories.tsx'
+  - '**/*.mdx'
+  - 'apps/web/.storybook/**'
 ---
 
 # Storybook conventions

@@ -1,6 +1,6 @@
 ---
 paths:
-  - "apps/web/src/**"
+  - 'apps/web/src/**'
 ---
 
 # Feature-Sliced Design in apps/web

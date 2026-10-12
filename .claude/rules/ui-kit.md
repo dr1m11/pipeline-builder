@@ -1,7 +1,7 @@
 ---
 paths:
-  - "apps/web/src/shared/ui/**"
-  - "apps/web/src/app/styles/**"
+  - 'apps/web/src/shared/ui/**'
+  - 'apps/web/src/app/styles/**'
 ---
 
 # UI kit (Radix + Tailwind CSS 4)

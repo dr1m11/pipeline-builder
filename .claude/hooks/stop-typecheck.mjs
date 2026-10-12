@@ -8,9 +8,18 @@ import path from 'node:path';
 import { fail, firstLines, git, isMain, PROJECT_DIR, readInput } from './_lib.mjs';
 
 const TS_FILE_RE = /\.(ts|tsx|mts|cts)$/;
-const CACHE_FILE = path.join(PROJECT_DIR, 'node_modules', '.cache', 'claude-hooks', 'typecheck.json');
+const CACHE_FILE = path.join(
+  PROJECT_DIR,
+  'node_modules',
+  '.cache',
+  'claude-hooks',
+  'typecheck.json',
+);
 
-/** Paths of changed or untracked TypeScript files from `git status --porcelain` output. */
+/**
+ * Paths of changed or untracked TypeScript files from `git status --porcelain` output.
+ * @param {string} porcelain
+ */
 export function changedTsFiles(porcelain) {
   return porcelain
     .split(/\r?\n/)
@@ -23,6 +32,7 @@ export function changedTsFiles(porcelain) {
     .filter((file) => TS_FILE_RE.test(file));
 }
 
+/** @param {string[]} files */
 function signatureOf(files) {
   const hash = createHash('sha256');
   for (const file of [...files].sort()) {
@@ -71,5 +81,7 @@ if (isMain(import.meta.url)) {
     writeFileSync(CACHE_FILE, JSON.stringify({ signature, checkedAt: new Date().toISOString() }));
     process.exit(0);
   }
-  fail(`pnpm typecheck failed. Fix these errors before finishing:\n${firstLines(`${result.stdout}\n${result.stderr}`, 40)}`);
+  fail(
+    `pnpm typecheck failed. Fix these errors before finishing:\n${firstLines(`${result.stdout}\n${result.stderr}`, 40)}`,
+  );
 }

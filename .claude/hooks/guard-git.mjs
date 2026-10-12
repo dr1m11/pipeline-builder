@@ -4,7 +4,10 @@ import { AI_ATTRIBUTION_RE, fail, git, isMain, PROJECT_DIR, readInput } from './
 const CONVENTIONAL_TITLE_RE =
   /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9-]+\))?!?: \S.*$/;
 
-/** Replace heredoc bodies, PowerShell here-strings and quoted strings so flags inside messages are ignored. */
+/**
+ * Replace heredoc bodies, PowerShell here-strings and quoted strings so flags inside messages are ignored.
+ * @param {string} command
+ */
 export function stripQuoted(command) {
   return command
     .replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2\s*(?=\n|$)/g, '<<HEREDOC')
@@ -12,6 +15,7 @@ export function stripQuoted(command) {
     .replace(/"(?:\\.|[^"\\])*"|'[^']*'/g, '""');
 }
 
+/** @param {string} command */
 function segments(command) {
   return command
     .split(/&&|\|\||[;|\n]/)
@@ -19,10 +23,10 @@ function segments(command) {
     .filter(Boolean);
 }
 
+/** @param {string} command */
 function extractTitle(command) {
   const match = /(?:--title|-t)(?:\s+|=)("(?:\\.|[^"\\])*"|'[^']*'|\S+)/.exec(command);
-  if (!match) return null;
-  return match[1].replace(/^(["'])([\s\S]*)\1$/, '$2');
+  return match?.[1]?.replace(/^(["'])([\s\S]*)\1$/, '$2') ?? null;
 }
 
 /**
@@ -43,11 +47,12 @@ export function checkCommand(command, { branch, hasOrigin }) {
 
   let createsBranch = false;
   for (const segment of segments(stripQuoted(command))) {
-    if (/\bgit\s+(switch\s+(-c|-C|--create)|checkout\s+-[bB])\b/.test(segment)) createsBranch = true;
+    if (/\bgit\s+(switch\s+(-c|-C|--create)|checkout\s+-[bB])\b/.test(segment))
+      createsBranch = true;
 
     const commit = /\bgit\s+(?:-[cC]\s+\S+\s+)*commit\b(.*)$/.exec(segment);
     if (commit) {
-      const args = commit[1];
+      const args = commit[1] ?? '';
       if (/(^|\s)--no-verify\b/.test(args) || /(^|\s)-[a-zA-Z]*n[a-zA-Z]*\b/.test(args)) {
         return 'Skipping git hooks (--no-verify / -n) is not allowed. Fix the reported problem instead.';
       }
@@ -58,14 +63,17 @@ export function checkCommand(command, { branch, hasOrigin }) {
 
     const push = /\bgit\s+(?:-[cC]\s+\S+\s+)*push\b(.*)$/.exec(segment);
     if (push) {
-      const args = push[1];
+      const args = push[1] ?? '';
       if (/(^|\s)--no-verify\b/.test(args)) {
         return 'Skipping git hooks (--no-verify) is not allowed.';
       }
       if (/(^|\s)(--force(?![-\w])|-[a-zA-Z]*f[a-zA-Z]*\b)/.test(args) || /(^|\s)\+\S/.test(args)) {
         return 'Plain force push is not allowed. On a feature branch use --force-with-lease.';
       }
-      if (/--force-with-lease|--force-if-includes/.test(args) && (/\bmain\b/.test(args) || branch === 'main')) {
+      if (
+        /--force-with-lease|--force-if-includes/.test(args) &&
+        (/\bmain\b/.test(args) || branch === 'main')
+      ) {
         return 'Force-pushing main is not allowed.';
       }
     }
