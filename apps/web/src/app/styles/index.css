@@ -1,5 +1,6 @@
 @import 'tailwindcss';
-@import '@xyflow/react/dist/style.css';
+/* In the components layer, so Tailwind utilities on nodes and handles override React Flow's defaults. */
+@import '@xyflow/react/dist/style.css' layer(components);
 @import './tokens.css';
 
 /* `dark:` utilities follow the [data-theme] attribute, not only the OS preference. */
@@ -22,6 +23,10 @@
   --color-success: var(--pb-success);
   --color-focus: var(--pb-focus);
   --shadow-elevated: var(--pb-shadow);
+  --color-port-text: var(--pb-port-text);
+  --color-port-number: var(--pb-port-number);
+  --color-port-json: var(--pb-port-json);
+  --color-port-any: var(--pb-port-any);
 }
 
 @layer base {

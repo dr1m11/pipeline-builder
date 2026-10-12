@@ -24,6 +24,12 @@
   --pb-success: oklch(0.56 0.14 150);
   --pb-focus: oklch(0.58 0.21 277);
   --pb-shadow: 0 1px 2px oklch(0.22 0.02 265 / 0.08), 0 4px 12px oklch(0.22 0.02 265 / 0.06);
+
+  /* Port types; each keeps at least 3:1 contrast against surface and surface-muted. */
+  --pb-port-text: oklch(0.55 0.13 245);
+  --pb-port-number: oklch(0.56 0.085 195);
+  --pb-port-json: oklch(0.56 0.19 330);
+  --pb-port-any: oklch(0.55 0.02 265);
 }
 
 [data-theme='dark'] {
@@ -45,6 +51,11 @@
   --pb-success: oklch(0.72 0.14 150);
   --pb-focus: oklch(0.74 0.15 277);
   --pb-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 4px 12px oklch(0 0 0 / 0.3);
+
+  --pb-port-text: oklch(0.72 0.13 245);
+  --pb-port-number: oklch(0.75 0.1 195);
+  --pb-port-json: oklch(0.74 0.15 330);
+  --pb-port-any: oklch(0.7 0.02 265);
 }
 
 /* React Flow reads its own variables; point them at our tokens so the canvas follows the theme. */
@@ -55,6 +66,10 @@
   --xy-node-border-color: var(--pb-border);
   --xy-node-color: var(--pb-fg);
   --xy-edge-stroke: var(--pb-fg-muted);
+  --xy-edge-stroke-selected: var(--pb-accent);
+  --xy-connectionline-stroke: var(--pb-accent);
+  --xy-selection-background-color: oklch(from var(--pb-accent) l c h / 0.08);
+  --xy-selection-border: 1px dashed var(--pb-accent);
   --xy-minimap-background-color: var(--pb-surface);
   --xy-minimap-mask-background-color: oklch(from var(--pb-canvas) l c h / 0.6);
   --xy-controls-button-background-color: var(--pb-surface);
@@ -63,4 +78,9 @@
   --xy-controls-button-color-hover: var(--pb-fg);
   --xy-controls-button-border-color: var(--pb-border);
   --xy-attribution-background-color: oklch(from var(--pb-surface) l c h / 0.7);
+}
+
+/* React Flow's grey (#999) attribution link fails WCAG contrast on a plain surface. */
+.react-flow__attribution a {
+  color: var(--pb-fg-muted);
 }
