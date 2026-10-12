@@ -1,4 +1,5 @@
 import { EditorPage } from '@/pages/editor';
+import { TooltipProvider } from '@/shared/ui/tooltip';
 
 import { DesktopOnlyGate } from './device-support';
 import { AppErrorBoundary } from './error-handling';
@@ -8,9 +9,11 @@ export function App() {
   return (
     <AppErrorBoundary>
       <ThemeSync />
-      <DesktopOnlyGate>
-        <EditorPage />
-      </DesktopOnlyGate>
+      <TooltipProvider>
+        <DesktopOnlyGate>
+          <EditorPage />
+        </DesktopOnlyGate>
+      </TooltipProvider>
     </AppErrorBoundary>
   );
 }

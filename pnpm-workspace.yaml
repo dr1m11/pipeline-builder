@@ -25,3 +25,5 @@ peerDependencyRules:
   allowedVersions:
     # tsconfck (via @feature-sliced/steiger-plugin) only parses tsconfig files; TS 6 is fine.
     tsconfck>typescript: '6'
+    # @steiger/toolkit only uses vitest for its own optional test helpers.
+    '@steiger/toolkit>vitest': '5'
