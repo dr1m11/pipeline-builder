@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // No DOM lib and no ambient types: browser and Node APIs must not leak into the core.
+    "lib": ["ES2023"],
+    "types": [],
+    "exactOptionalPropertyTypes": true
+  },
+  "include": ["src"]
+}
