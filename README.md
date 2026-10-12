@@ -2,27 +2,68 @@
 
 > Node-based editor for building and running LLM and data pipelines in the browser.
 
-🚧 **Work in progress** — currently at stage A1 (foundation). See the [roadmap](docs/roadmap.md).
+[![CI](https://github.com/dr1m11/pipeline-builder/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dr1m11/pipeline-builder/actions/workflows/ci.yml)
+[![Deploy](https://github.com/dr1m11/pipeline-builder/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dr1m11/pipeline-builder/actions/workflows/deploy.yml)
+[![Storybook](https://github.com/dr1m11/pipeline-builder/actions/workflows/storybook.yml/badge.svg?branch=main)](https://dr1m11.github.io/pipeline-builder/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+**[Live demo](https://pipeline-builder.marat-gabdrashitov17.workers.dev)** · **[Storybook](https://dr1m11.github.io/pipeline-builder/)** · **[Roadmap](docs/roadmap.md)** · **[Architecture decisions](docs/adr/README.md)**
+
+> 🚧 Work in progress. Stage A1 (foundation) is done; the MVP lands with stage A4. Progress is tracked in [milestones](https://github.com/dr1m11/pipeline-builder/milestones).
 
 ## Features
 
-Planned for the MVP:
+Available now:
+
+- Editor shell with a React Flow canvas, light/dark themes without a flash, desktop-only gate
+- UI kit on Radix primitives and design tokens, documented in Storybook
+- Every pull request gets its own preview deployment
+
+Planned for the MVP (A2–A4):
 
 - Drag-and-drop canvas with 6 node types and typed ports
 - Graph validation (cycles, type mismatches, unreachable nodes) shown on the canvas
 - Properties panel generated from node schemas (React Hook Form + Zod)
 - Undo / redo, copy / paste, keyboard shortcuts
 - JSON import / export with schema migrations
-- Pipeline execution with token streaming over SSE and cancellation
-- Auto-layout in a Web Worker, 500+ nodes at 60 FPS
+
+Later: execution with token streaming over SSE and cancellation (A5), auto-layout in a Web Worker and 500+ nodes at 60 FPS (A6), real-time collaboration with Yjs (A9).
 
 ## Tech stack
 
-React 19, TypeScript (strict), Vite, React Flow, Radix UI, Tailwind CSS, Vitest, Playwright, Storybook, pnpm workspaces, Cloudflare Workers.
+React 19 · TypeScript (strict) · Vite · React Flow · Radix UI · Tailwind CSS · Vitest · Testing Library · Playwright · Storybook · pnpm workspaces · Cloudflare Workers
 
 ## Architecture
 
-Feature-Sliced Design enforced by Steiger, with the domain core (graph model, validation, engine, undo, migrations) in a separate framework-free package. Decisions are recorded in [`docs/adr/`](docs/adr/README.md).
+```
+apps/web/              React SPA, Feature-Sliced Design (checked by Steiger)
+  src/app/             composition root: error handling, device support, theme, global styles
+  src/pages/           editor page
+  src/features/        user actions (toggle-theme, …)
+  src/shared/          UI kit, helpers, config
+packages/core/         framework-free domain: graph model, validation, engine, undo, migrations
+docs/adr/              architecture decision records
+```
+
+- **Feature-Sliced Design** with layer boundaries enforced by [Steiger](https://github.com/feature-sliced/steiger) in CI.
+- **Framework-free core.** Domain logic lives in `packages/core`, which cannot import React or browser APIs (lint rule plus a tsconfig without the DOM lib) and has its own 80% coverage gate. See [ADR 0001](docs/adr/0001-monorepo-with-fsd-app-and-framework-free-core.md).
+- **Design tokens** as CSS variables exposed through Tailwind utilities; components never use raw colours. See [ADR 0004](docs/adr/0004-ui-stack-radix-and-tailwind.md).
+- **Hosting** on Cloudflare Workers static assets, with the SSE proxy and collaboration backend planned on the same platform. See [ADR 0003](docs/adr/0003-hosting-on-cloudflare-workers.md).
+
+## Quality gates
+
+Every pull request runs:
+
+| Check            | What it enforces                                                                |
+| ---------------- | ------------------------------------------------------------------------------- |
+| Lint & typecheck | Prettier, ESLint with type-aware rules, Steiger, TypeScript strict (no `any`)   |
+| Unit tests       | Vitest + Testing Library; ≥ 80% coverage on `packages/core`, reported on the PR |
+| Storybook tests  | Every story renders and runs its interaction test in Chromium, with axe checks  |
+| E2E              | Playwright against the production build, with axe and a console-error guard     |
+| PR title         | Conventional Commits (the squash-merge commit message)                          |
+| Preview          | A deployed preview URL commented on the PR                                      |
+
+`main` is protected: changes land only through squash-merged pull requests with green checks.
 
 ## Getting started
 
@@ -30,9 +71,28 @@ Requires Node.js 24 and pnpm 10.
 
 ```bash
 pnpm install
-pnpm dev
+pnpm dev          # http://localhost:5173
+pnpm storybook    # http://localhost:6006
 ```
+
+| Script                 | Description                                                    |
+| ---------------------- | -------------------------------------------------------------- |
+| `pnpm verify`          | Format check, lint, Steiger, typecheck, unit tests, build      |
+| `pnpm verify:full`     | `verify` plus Storybook tests and e2e                          |
+| `pnpm test`            | Unit tests (`core` and `web` projects)                         |
+| `pnpm test:coverage`   | Unit tests with coverage thresholds                            |
+| `pnpm test:storybook`  | Stories as browser tests (requires `playwright install`)       |
+| `pnpm test:e2e`        | Playwright e2e against `vite preview` (run `pnpm build` first) |
+| `pnpm build-storybook` | Static Storybook in `apps/web/storybook-static`                |
+
+## Performance
+
+Benchmarks (FPS while panning, validation and layout times for 100–1000 nodes) will be published here with stage A6.
+
+## Working on this repository
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/) and are checked by commitlint; every change goes through a pull request. The repository also ships a [Claude Code](https://code.claude.com) setup — project rules in `CLAUDE.md` and `.claude/` (path-scoped rules, skills, guard and formatting hooks) — that encodes the same conventions for AI-assisted work.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © Marat Gabdrashitov
