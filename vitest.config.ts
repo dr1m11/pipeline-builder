@@ -16,12 +16,15 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      include: ['packages/core/src/**/*.ts', 'apps/web/src/**/*.{ts,tsx}'],
-      exclude: ['**/*.test.{ts,tsx}', '**/*.stories.tsx', '**/index.ts', 'apps/web/src/main.tsx'],
+      // Vitest 5 matches include/exclude against paths relative to each project's root
+      // (packages/core, apps/web), so these patterns cover the sources of both projects.
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['**/*.test.{ts,tsx}', '**/*.stories.tsx', '**/index.ts', 'src/main.tsx'],
       reporter: ['text', 'html', 'json-summary', 'json'],
       reportOnFailure: true,
       thresholds: {
         // The domain core is the quality gate (see docs/adr/0001).
+        // Unlike include/exclude, threshold globs match paths relative to the repository root.
         'packages/core/src/**': { lines: 80, functions: 80, branches: 80, statements: 80 },
       },
     },
