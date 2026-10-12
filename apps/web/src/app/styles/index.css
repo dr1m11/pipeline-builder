@@ -1,74 +1,39 @@
-/* Baseline styles until the Tailwind design tokens land (stage A1, design-system PR). */
+@import 'tailwindcss';
+@import '@xyflow/react/dist/style.css';
+@import './tokens.css';
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+/* `dark:` utilities follow the [data-theme] attribute, not only the OS preference. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Expose tokens as Tailwind utilities: bg-surface, text-fg-muted, border-border, ring-focus… */
+@theme inline {
+  --color-canvas: var(--pb-canvas);
+  --color-surface: var(--pb-surface);
+  --color-surface-muted: var(--pb-surface-muted);
+  --color-fg: var(--pb-fg);
+  --color-fg-muted: var(--pb-fg-muted);
+  --color-border: var(--pb-border);
+  --color-accent: var(--pb-accent);
+  --color-accent-hover: var(--pb-accent-hover);
+  --color-accent-fg: var(--pb-accent-fg);
+  --color-danger: var(--pb-danger);
+  --color-danger-fg: var(--pb-danger-fg);
+  --color-warning: var(--pb-warning);
+  --color-success: var(--pb-success);
+  --color-focus: var(--pb-focus);
+  --shadow-elevated: var(--pb-shadow);
 }
 
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-}
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
 
-body {
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
-  line-height: 1.5;
-  color: CanvasText;
-  background: Canvas;
-}
-
-.editor-page {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  height: 100%;
-}
-
-.editor-page__header {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
-}
-
-.editor-page__title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.editor-page__canvas {
-  min-height: 0;
-}
-
-.screen-message {
-  display: grid;
-  place-content: center;
-  gap: 0.75rem;
-  max-width: 36rem;
-  min-height: 100%;
-  margin: 0 auto;
-  padding: 1.5rem;
-  text-align: center;
-}
-
-.screen-message h1 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.screen-message__details {
-  overflow: auto;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  text-align: left;
-  white-space: pre-wrap;
-  background: color-mix(in srgb, CanvasText 6%, transparent);
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-fg);
+    -webkit-font-smoothing: antialiased;
+  }
 }

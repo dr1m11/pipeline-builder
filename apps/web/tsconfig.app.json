@@ -9,5 +9,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "vitest.setup.ts"]
+  "include": ["src", "vitest.setup.ts", ".storybook/**/*.ts", ".storybook/**/*.tsx"]
 }

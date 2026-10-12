@@ -1,0 +1,48 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Foundations/Design tokens" />
+
+# Design tokens
+
+Components never use raw colours. They use Tailwind utilities generated from CSS variables in
+`src/app/styles/tokens.css`, so both themes come from one place. Switch the theme in the toolbar to
+compare.
+
+<div className="not-prose grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
+  {[
+    ['canvas', 'bg-canvas', 'Page and canvas background'],
+    ['surface', 'bg-surface', 'Panels, nodes, popovers'],
+    ['surface-muted', 'bg-surface-muted', 'Subtle fills, inputs'],
+    ['fg', 'bg-fg', 'Primary text'],
+    ['fg-muted', 'bg-fg-muted', 'Secondary text'],
+    ['border', 'bg-border', 'Dividers and outlines'],
+    ['accent', 'bg-accent', 'Primary actions, selection'],
+    ['danger', 'bg-danger', 'Destructive actions, errors'],
+    ['warning', 'bg-warning', 'Warnings'],
+    ['success', 'bg-success', 'Completed states'],
+    ['focus', 'bg-focus', 'Focus rings'],
+  ].map(([name, swatch, usage]) => (
+    <div key={name} className="overflow-hidden rounded-lg border border-border bg-surface text-fg">
+      <div className={`h-14 ${swatch}`} />
+      <div className="p-2 text-sm">
+        <code>{name}</code>
+        <div className="text-fg-muted">{usage}</div>
+      </div>
+    </div>
+  ))}
+</div>
+
+## Usage
+
+| Token     | Utilities                                              |
+| --------- | ------------------------------------------------------ |
+| `canvas`  | `bg-canvas`                                            |
+| `surface` | `bg-surface`, `bg-surface-muted`                       |
+| `fg`      | `text-fg`, `text-fg-muted`                             |
+| `border`  | `border-border`                                        |
+| `accent`  | `bg-accent`, `hover:bg-accent-hover`, `text-accent-fg` |
+| `danger`  | `bg-danger`, `text-danger-fg`                          |
+| `focus`   | `outline-focus`, `ring-focus`                          |
+
+Adding a colour means adding a variable for both themes in `tokens.css` and mapping it in the
+`@theme inline` block of `index.css`.

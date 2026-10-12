@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint:fsd": "steiger ./src",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@pipeline-builder/core": "workspace:*",
@@ -25,6 +27,13 @@
     "@feature-sliced/steiger-plugin": "0.8.0",
     "@playwright/test": "1.64.0",
     "@steiger/toolkit": "0.2.3",
+    "@storybook/addon-a11y": "10.6.1",
+    "@storybook/addon-docs": "10.6.1",
+    "@storybook/addon-mcp": "10.6.1",
+    "@storybook/addon-themes": "10.6.1",
+    "@storybook/addon-vitest": "10.6.1",
+    "@storybook/react-vite": "10.6.1",
+    "@tailwindcss/vite": "4.3.3",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
@@ -33,10 +42,16 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
+    "@vitest/browser": "5.0.4",
+    "@vitest/browser-playwright": "5.0.4",
     "jsdom": "29.1.1",
+    "playwright": "1.64.0",
     "steiger": "0.7.0",
+    "storybook": "10.6.1",
+    "tailwindcss": "4.3.3",
     "typescript": "catalog:",
     "vite": "8.3.4",
+    "vitest": "5.0.4",
     "wrangler": "4.149.0"
   }
 }

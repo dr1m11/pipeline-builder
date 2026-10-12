@@ -8,6 +8,7 @@
   "include": [
     "vite.config.ts",
     "vitest.config.ts",
+    "vitest.storybook.config.ts",
     "playwright.config.ts",
     "steiger.config.ts",
     "e2e"
