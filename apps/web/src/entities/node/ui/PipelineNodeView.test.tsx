@@ -73,11 +73,11 @@ describe('PipelineNodeView', () => {
   });
 
   it('names the kind only when the label does not', async () => {
-    renderOnCanvas([node('condition', 'Condition 1'), node('condition', 'Is it spam?')]);
+    renderOnCanvas([node('condition', 'Condition 1'), node('input', 'Input data')]);
 
     const numbered = await screen.findByRole('group', { name: 'Condition 1' });
-    const renamed = screen.getByRole('group', { name: 'Is it spam?' });
+    const renamed = screen.getByRole('group', { name: 'Input data' });
     expect(within(numbered).queryByText('Condition')).not.toBeInTheDocument();
-    expect(within(renamed).getByText('Condition')).toBeInTheDocument();
+    expect(within(renamed).getByText('Input')).toBeInTheDocument();
   });
 });

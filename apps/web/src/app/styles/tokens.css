@@ -68,8 +68,6 @@
   --xy-edge-stroke: var(--pb-fg-muted);
   --xy-edge-stroke-selected: var(--pb-accent);
   --xy-connectionline-stroke: var(--pb-accent);
-  --xy-handle-background-color: var(--pb-surface);
-  --xy-handle-border-color: var(--pb-fg-muted);
   --xy-selection-background-color: oklch(from var(--pb-accent) l c h / 0.08);
   --xy-selection-border: 1px dashed var(--pb-accent);
   --xy-minimap-background-color: var(--pb-surface);

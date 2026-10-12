@@ -54,6 +54,8 @@ if (!('DOMMatrixReadOnly' in globalThis)) {
     value: DOMMatrixReadOnlyShim,
   });
 }
+// Deliberately global: React Flow skips nodes that measure 0×0, and no other component under test
+// reads offset sizes.
 Object.defineProperties(HTMLElement.prototype, {
   offsetWidth: {
     configurable: true,

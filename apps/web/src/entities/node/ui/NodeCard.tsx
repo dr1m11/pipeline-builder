@@ -2,7 +2,7 @@ import { getNodePorts, NODE_DEFINITIONS, type PipelineNode } from '@pipeline-bui
 
 import { cn } from '@/shared/lib/cn';
 
-import { describeNode } from '../lib/describe-node';
+import { describeNode, labelNamesKind } from '../lib/describe-node';
 import { NodeKindIcon } from './NodeKindIcon';
 import { PortHandle } from './PortHandle';
 
@@ -28,7 +28,7 @@ export function NodeCard({ node, selected = false }: NodeCardProps) {
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <NodeKindIcon kind={node.kind} className="size-4 shrink-0 text-fg-muted" />
         <span className="truncate text-sm font-semibold">{node.label}</span>
-        {!node.label.startsWith(title) && (
+        {!labelNamesKind(node.label, title) && (
           <span className="ml-auto shrink-0 text-xs text-fg-muted">{title}</span>
         )}
       </div>

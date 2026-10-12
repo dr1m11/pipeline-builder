@@ -6,7 +6,7 @@ import {
 } from '@pipeline-builder/core';
 import { describe, expect, it } from 'vitest';
 
-import { describeNode } from './describe-node';
+import { describeNode, labelNamesKind } from './describe-node';
 
 function nodeWith<K extends NodeKind>(kind: K, data: Partial<NodeDataMap[K]>): NodeOfKind<K> {
   return {
@@ -57,5 +57,26 @@ describe('describeNode', () => {
   it('shows the format of an Output', () => {
     expect(describeNode(nodeWith('output', {}))).toBe('Shows text');
     expect(describeNode(nodeWith('output', { format: 'markdown' }))).toBe('Shows Markdown');
+  });
+});
+
+describe('labelNamesKind', () => {
+  it('accepts the bare title and default numbered labels', () => {
+    expect(labelNamesKind('Prompt', 'Prompt')).toBe(true);
+    expect(labelNamesKind('Prompt 1', 'Prompt')).toBe(true);
+    expect(labelNamesKind('LLM Call 12', 'LLM Call')).toBe(true);
+  });
+
+  it('rejects labels that only start with the title', () => {
+    const cases = [
+      ['Input data', 'Input'],
+      ['Prompting guide', 'Prompt'],
+      ['Prompt 01', 'Prompt'],
+      ['Prompt 2b', 'Prompt'],
+      ['Prompt ', 'Prompt'],
+    ] as const;
+    for (const [label, title] of cases) {
+      expect(labelNamesKind(label, title)).toBe(false);
+    }
   });
 });
