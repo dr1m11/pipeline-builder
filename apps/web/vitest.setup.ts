@@ -3,15 +3,71 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
-// jsdom has no layout engine; React Flow only needs ResizeObserver to exist.
-class ResizeObserverMock {
-  observe = vi.fn();
-  unobserve = vi.fn();
-  disconnect = vi.fn();
+// jsdom has no layout engine. React Flow renders a node only after measuring it (ResizeObserver,
+// offsetWidth/offsetHeight, and the zoom from DOMMatrixReadOnly), so stand in for those APIs as
+// https://reactflow.dev/learn/advanced-use/testing recommends.
+class ResizeObserverShim implements ResizeObserver {
+  readonly #callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.#callback = callback;
+  }
+
+  observe(target: Element): void {
+    setTimeout(() => {
+      const contentRect = target.getBoundingClientRect();
+      // Radix reads borderBoxSize[0], so every size list carries one entry.
+      const sizes = [{ inlineSize: contentRect.width, blockSize: contentRect.height }];
+      const entry: ResizeObserverEntry = {
+        target,
+        contentRect,
+        borderBoxSize: sizes,
+        contentBoxSize: sizes,
+        devicePixelContentBoxSize: sizes,
+      };
+      this.#callback([entry], this);
+    }, 0);
+  }
+
+  unobserve(): void {
+    // Each observation reports once, so there is nothing to stop.
+  }
+
+  disconnect(): void {
+    // Each observation reports once, so there is nothing to stop.
+  }
 }
-if (!('ResizeObserver' in globalThis)) {
-  globalThis.ResizeObserver = ResizeObserverMock;
+
+class DOMMatrixReadOnlyShim {
+  readonly m22: number;
+
+  constructor(transform?: string) {
+    const scale = /scale\(([\d.]+)\)/.exec(transform ?? '')?.[1];
+    this.m22 = scale === undefined ? 1 : Number(scale);
+  }
 }
+
+if (!('ResizeObserver' in globalThis)) globalThis.ResizeObserver = ResizeObserverShim;
+if (!('DOMMatrixReadOnly' in globalThis)) {
+  Object.defineProperty(globalThis, 'DOMMatrixReadOnly', {
+    configurable: true,
+    value: DOMMatrixReadOnlyShim,
+  });
+}
+Object.defineProperties(HTMLElement.prototype, {
+  offsetWidth: {
+    configurable: true,
+    get(this: HTMLElement) {
+      return Number.parseFloat(this.style.width) || 1;
+    },
+  },
+  offsetHeight: {
+    configurable: true,
+    get(this: HTMLElement) {
+      return Number.parseFloat(this.style.height) || 1;
+    },
+  },
+});
 
 // jsdom does not implement matchMedia: default to "no media query matches"; tests can stub it.
 Object.defineProperty(window, 'matchMedia', {

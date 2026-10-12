@@ -32,6 +32,29 @@ compare.
   ))}
 </div>
 
+## Port types
+
+Each port type has a colour for its connection dot. Colour is never the only cue: ports also show
+their type as text, and `any` is drawn as a ring. Each colour keeps at least 3:1 contrast against
+`surface` and `surface-muted` in both themes.
+
+<div className="not-prose grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
+  {[
+    ['port-text', 'bg-port-text', 'Text: prompts, responses'],
+    ['port-number', 'bg-port-number', 'Numbers'],
+    ['port-json', 'bg-port-json', 'Structured JSON values'],
+    ['port-any', 'bg-port-any', 'Accepts or yields any type'],
+  ].map(([name, swatch, usage]) => (
+    <div key={name} className="overflow-hidden rounded-lg border border-border bg-surface text-fg">
+      <div className={`h-14 ${swatch}`} />
+      <div className="p-2 text-sm">
+        <code>{name}</code>
+        <div className="text-fg-muted">{usage}</div>
+      </div>
+    </div>
+  ))}
+</div>
+
 ## Usage
 
 | Token     | Utilities                                              |
@@ -43,6 +66,7 @@ compare.
 | `accent`  | `bg-accent`, `hover:bg-accent-hover`, `text-accent-fg` |
 | `danger`  | `bg-danger`, `text-danger-fg`                          |
 | `focus`   | `outline-focus`, `ring-focus`                          |
+| `port-*`  | `bg-port-text`, `border-port-json`, …                  |
 
 Adding a colour means adding a variable for both themes in `tokens.css` and mapping it in the
 `@theme inline` block of `index.css`.
