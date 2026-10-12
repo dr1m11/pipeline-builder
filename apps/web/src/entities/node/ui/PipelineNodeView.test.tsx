@@ -31,7 +31,7 @@ function node<K extends NodeKind>(
 function renderOnCanvas(nodes: PipelineNode[]) {
   return render(
     <div style={{ width: 800, height: 600 }}>
-      <ReactFlow nodes={nodes.map(toFlowNode)} nodeTypes={NODE_TYPES} />
+      <ReactFlow nodes={nodes.map((node) => toFlowNode(node))} nodeTypes={NODE_TYPES} />
     </div>,
   );
 }
