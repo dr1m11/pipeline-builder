@@ -12,6 +12,21 @@ test.describe('smoke', () => {
     await expectNoA11yViolations();
   });
 
+  test('keeps the chosen dark theme after a reload', async ({ page, expectNoA11yViolations }) => {
+    await page.goto('/');
+    const html = page.locator('html');
+
+    await page.getByRole('group', { name: 'Colour theme' }).getByText('Dark').click();
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+
+    // theme-init.js applies the stored preference before React mounts.
+    await page.reload();
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    await expect(page.getByRole('radio', { name: 'Dark' })).toBeChecked();
+
+    await expectNoA11yViolations();
+  });
+
   test('shows a placeholder on narrow screens', async ({ page, expectNoA11yViolations }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/');

@@ -87,21 +87,7 @@ jobs:
         with:
           name: web-dist
           path: apps/web/dist/
-      - name: Resolve Playwright version
-        id: playwright
-        run: echo "version=$(pnpm --filter @pipeline-builder/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - name: Install Chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @pipeline-builder/web exec playwright install --with-deps chromium
-      - name: Install Chromium system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @pipeline-builder/web exec playwright install-deps chromium
+      - uses: ./.github/actions/playwright
 
       - name: Run Playwright against the production build
         run: pnpm test:e2e
@@ -113,11 +99,25 @@ jobs:
           path: apps/web/playwright-report/
           retention-days: 7
 
+  storybook:
+    name: Storybook tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/playwright
+
+      - name: Run stories as tests (render, play functions, axe)
+        run: pnpm test:storybook
+      - name: Build Storybook
+        run: pnpm build-storybook
+
   # Single required status check for branch protection; add every job to `needs`.
   ci-ok:
     name: CI OK
     if: always()
-    needs: [quality, test, build, e2e]
+    needs: [quality, test, build, e2e, storybook]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

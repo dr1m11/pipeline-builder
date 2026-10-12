@@ -1,17 +1,18 @@
-import '@xyflow/react/dist/style.css';
-
 import { createEmptyPipeline } from '@pipeline-builder/core';
 import { Background, Controls, MiniMap, ReactFlow } from '@xyflow/react';
+
+import { ThemeToggle } from '@/features/toggle-theme';
 
 const initialPipeline = createEmptyPipeline({ id: 'draft', name: 'Untitled pipeline' });
 
 export function EditorPage() {
   return (
-    <div className="editor-page">
-      <header className="editor-page__header">
-        <h1 className="editor-page__title">{initialPipeline.name}</h1>
+    <div className="grid h-full grid-rows-[auto_1fr]">
+      <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2">
+        <h1 className="text-base font-semibold">{initialPipeline.name}</h1>
+        <ThemeToggle />
       </header>
-      <main className="editor-page__canvas" aria-label="Pipeline canvas">
+      <main className="min-h-0" aria-label="Pipeline canvas">
         <ReactFlow nodes={[]} edges={[]} fitView>
           <Background />
           <Controls />

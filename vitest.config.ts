@@ -12,6 +12,7 @@ export default defineConfig({
         },
       },
       'apps/web/vitest.config.ts',
+      'apps/web/vitest.storybook.config.ts',
     ],
     coverage: {
       provider: 'v8',

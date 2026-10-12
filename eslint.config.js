@@ -9,6 +9,7 @@ import playwright from 'eslint-plugin-playwright';
 import reactHooks from 'eslint-plugin-react-hooks';
 import { reactRefresh } from 'eslint-plugin-react-refresh';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
+import storybook from 'eslint-plugin-storybook';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -57,9 +58,21 @@ export default defineConfig(
     languageOptions: { globals: globals.node },
   },
   {
+    // Classic scripts served as-is to the browser (e.g. the pre-paint theme script).
+    files: ['apps/web/public/**/*.js'],
+    languageOptions: { sourceType: 'script', globals: globals.browser },
+  },
+  {
     // Tools that load their config through a default export.
     files: ['**/*.config.{js,mjs,ts,mts}', '**/.storybook/**', '**/*.stories.tsx'],
     rules: { 'no-restricted-syntax': 'off' },
+  },
+  {
+    files: ['**/*.stories.tsx'],
+    // The plugin's rule types come from @typescript-eslint/utils and do not match ESLint 10's Plugin type.
+    extends: [
+      /** @type {import('eslint').Linter.Config[]} */ (storybook.configs['flat/recommended']),
+    ],
   },
   {
     files: ['apps/web/src/**/*.{ts,tsx}'],
