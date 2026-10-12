@@ -1,0 +1,93 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PRODUCTION_URL: https://pipeline-builder.marat-gabdrashitov17.workers.dev
+
+jobs:
+  production:
+    name: Production
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: ${{ env.PRODUCTION_URL }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - name: Build
+        run: pnpm build
+      - name: Deploy to Cloudflare Workers
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy --message "main@${GITHUB_SHA::7}"
+      - name: Smoke-check the deployment
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors \
+            --output /dev/null "$PRODUCTION_URL/editor/deep-link"
+
+  # Same-repo PRs only (fork PRs have no secrets); Renovate PRs skip previews to save noise.
+  preview:
+    name: Preview
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'renovate[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: deploy-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - name: Build
+        run: pnpm build
+      - name: Upload a preview version
+        id: upload
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-output.ndjson
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          pnpm exec wrangler versions upload \
+            --preview-alias "pr-${PR_NUMBER}" \
+            --message "PR #${PR_NUMBER} @ ${HEAD_SHA::7}"
+          url=$(jq -r 'select(.type == "version-upload") | .preview_alias_url // .preview_url // empty' \
+            "$WRANGLER_OUTPUT_FILE_PATH" | tail -n 1)
+          if [ -z "$url" ]; then
+            echo "::error::wrangler did not report a preview URL"
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Comment the preview URL
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: preview
+          message: |
+            **Preview:** ${{ steps.upload.outputs.url }}
+
+            Built from ${{ github.event.pull_request.head.sha }}. Updates on every push to this PR.
