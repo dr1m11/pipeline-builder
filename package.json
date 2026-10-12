@@ -7,6 +7,9 @@
   "author": "Marat Gabdrashitov",
   "type": "module",
   "packageManager": "pnpm@10.30.3",
+  "scripts": {
+    "test:hooks": "node --test \".claude/hooks/*.test.mjs\""
+  },
   "engines": {
     "node": ">=24.11.0"
   }
