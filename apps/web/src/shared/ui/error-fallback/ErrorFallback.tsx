@@ -1,3 +1,5 @@
+import { Button } from '@/shared/ui/button';
+
 export interface ErrorFallbackProps {
   error: unknown;
   onRetry: () => void;
@@ -22,13 +24,9 @@ export function ErrorFallback({ error, onRetry }: ErrorFallbackProps) {
         {describeError(error)}
       </pre>
       <div>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        >
+        <Button variant="primary" onClick={onRetry}>
           Try again
-        </button>
+        </Button>
       </div>
     </div>
   );

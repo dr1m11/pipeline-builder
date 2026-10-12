@@ -3,6 +3,8 @@ import '../src/app/styles/index.css';
 import { withThemeByDataAttribute } from '@storybook/addon-themes';
 import type { Preview } from '@storybook/react-vite';
 
+import { TooltipProvider } from '../src/shared/ui/tooltip';
+
 const preview: Preview = {
   tags: ['autodocs'],
   parameters: {
@@ -14,6 +16,11 @@ const preview: Preview = {
     a11y: { test: 'error' },
   },
   decorators: [
+    (Story) => (
+      <TooltipProvider delayDuration={0}>
+        <Story />
+      </TooltipProvider>
+    ),
     withThemeByDataAttribute({
       themes: { light: 'light', dark: 'dark' },
       defaultTheme: 'light',
