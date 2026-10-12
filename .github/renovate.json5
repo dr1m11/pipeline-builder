@@ -1,0 +1,88 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:recommended',
+    ':semanticCommits',
+    ':semanticCommitScope(deps)',
+    'helpers:pinGitHubActionDigests',
+  ],
+  timezone: 'Asia/Tbilisi',
+  schedule: ['before 6am on monday'],
+  // Let new releases settle before proposing them (catches yanked or broken publishes).
+  minimumReleaseAge: '3 days',
+  rangeStrategy: 'pin',
+  labels: ['dependencies'],
+  dependencyDashboard: true,
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ['before 6am on monday'],
+  },
+  packageRules: [
+    {
+      description: 'typescript-eslint supports TypeScript < 6.1 (docs/adr/0002-toolchain-baseline.md)',
+      matchPackageNames: ['typescript'],
+      allowedVersions: '<6.1.0',
+    },
+    {
+      description: 'Runtime is Node 24 (.nvmrc)',
+      matchPackageNames: ['@types/node'],
+      allowedVersions: '<25',
+    },
+    {
+      description: 'jsdom 30 needs Node >= 24.15; lift once local environments are upgraded',
+      matchPackageNames: ['jsdom'],
+      allowedVersions: '<30',
+    },
+    {
+      groupName: 'react',
+      matchPackageNames: ['react', 'react-dom', '@types/react', '@types/react-dom'],
+    },
+    {
+      groupName: 'storybook',
+      matchPackageNames: ['storybook', '@storybook/**', 'eslint-plugin-storybook'],
+    },
+    {
+      groupName: 'vitest',
+      matchPackageNames: ['vitest', '@vitest/**'],
+    },
+    {
+      groupName: 'playwright',
+      matchPackageNames: ['playwright', '@playwright/**'],
+    },
+    {
+      groupName: 'eslint',
+      matchPackageNames: [
+        'eslint',
+        '@eslint/**',
+        'typescript-eslint',
+        'eslint-config-*',
+        'eslint-plugin-*',
+        '@eslint-react/**',
+        'globals',
+      ],
+    },
+    {
+      groupName: 'tailwind',
+      matchPackageNames: ['tailwindcss', '@tailwindcss/**', 'prettier-plugin-tailwindcss'],
+    },
+    {
+      groupName: 'steiger',
+      matchPackageNames: ['steiger', '@steiger/**', '@feature-sliced/**'],
+    },
+    {
+      groupName: 'cloudflare',
+      matchPackageNames: ['wrangler', '@cloudflare/**'],
+    },
+    {
+      groupName: 'github actions',
+      matchManagers: ['github-actions'],
+    },
+    {
+      description: 'Low-risk dev tooling updates merge themselves once required checks pass',
+      matchDepTypes: ['devDependencies'],
+      matchUpdateTypes: ['minor', 'patch', 'pin', 'digest'],
+      automerge: true,
+      platformAutomerge: true,
+    },
+  ],
+}
