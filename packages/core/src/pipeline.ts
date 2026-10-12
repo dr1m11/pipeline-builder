@@ -1,23 +1,16 @@
+import type { PipelineNode } from './nodes/registry';
 import { err, ok, type Result } from './result';
 import { SCHEMA_VERSION } from './schema-version';
 
-// Minimal graph model for the foundation stage; node kinds, typed ports and node data arrive in A2.
-
-export interface Position {
-  readonly x: number;
-  readonly y: number;
-}
-
-export interface PipelineNode {
-  readonly id: string;
-  readonly kind: string;
-  readonly position: Position;
-}
-
+/** A connection from an output port of one node to an input port of another. */
 export interface PipelineEdge {
   readonly id: string;
   readonly source: string;
+  /** Output port id on the source node. */
+  readonly sourcePort: string;
   readonly target: string;
+  /** Input port id on the target node. */
+  readonly targetPort: string;
 }
 
 /** Serializable pipeline document. */

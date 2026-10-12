@@ -26,7 +26,7 @@ Key scenarios:
 
 - Node palette with drag-and-drop onto the canvas.
 - Node types: Input, Prompt (template with variables), LLM Call, Transform, Condition (branching), Output.
-- Typed ports: connecting incompatible ports is not allowed.
+- Typed ports: connecting incompatible ports is not allowed. Fields and port types of every node: [ADR 0005](./adr/0005-node-catalogue-and-typed-ports.md).
 - Zoom, pan, minimap, marquee selection, bulk operations.
 
 **Graph validation**
@@ -99,4 +99,3 @@ Authentication and accounts, server-side graph storage, billing, a mobile editor
 
 - Final name and demo domain.
 - Which real LLM providers the proxy supports (one or several).
-- Exact field set and port types for every node.
