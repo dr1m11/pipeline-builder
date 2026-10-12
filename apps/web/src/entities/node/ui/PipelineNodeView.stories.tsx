@@ -29,7 +29,7 @@ function node<K extends NodeKind>(
 }
 
 function flowNode(domainNode: PipelineNode, selected = false): PipelineFlowNode {
-  return { ...toFlowNode(domainNode), selected };
+  return toFlowNode(domainNode, { selected });
 }
 
 interface NodesPreviewProps {
