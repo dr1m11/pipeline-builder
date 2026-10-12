@@ -1,5 +1,11 @@
-import { addNode, connect, createEmptyPipeline, type Pipeline } from '@pipeline-builder/core';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import {
+  addNode,
+  connect,
+  createEmptyPipeline,
+  type NodeKind,
+  type Pipeline,
+} from '@pipeline-builder/core';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
@@ -32,8 +38,17 @@ function chain(): Pipeline {
   return pipeline;
 }
 
-function renderCanvas() {
-  const store = createPipelineStore(chain());
+/** Unconnected nodes of the given kinds in a row, with their kinds as ids. */
+function row(...kinds: NodeKind[]): Pipeline {
+  return kinds.reduce(
+    (pipeline, kind, index) =>
+      addNode(pipeline, { kind, id: kind, position: { x: index * 300, y: 0 } }).pipeline,
+    createEmptyPipeline({ id: 'draft', name: 'Test' }),
+  );
+}
+
+function renderCanvas(pipeline = chain()) {
+  const store = createPipelineStore(pipeline, { createId: () => 'new' });
   render(
     <PipelineStoreProvider store={store}>
       <div style={{ width: 1200, height: 600 }}>
@@ -48,6 +63,20 @@ async function selectWithKeyboard(user: ReturnType<typeof userEvent.setup>, name
   const node = await screen.findByRole('group', { name });
   act(() => {
     node.focus();
+  });
+  await user.keyboard('{Enter}');
+}
+
+/** Presses Enter on a port: the first port starts a connection, the second completes it. */
+async function activatePort(
+  user: ReturnType<typeof userEvent.setup>,
+  nodeName: string,
+  portName: string,
+) {
+  const node = await screen.findByRole('group', { name: nodeName });
+  const port = within(node).getByRole('button', { name: portName });
+  act(() => {
+    port.focus();
   });
   await user.keyboard('{Enter}');
 }
@@ -85,5 +114,51 @@ describe('PipelineCanvas', () => {
 
     expect(store.getState().pipeline.nodes[0]?.position).toEqual({ x: 5, y: 5 });
     expect(store.getState().dragPositions.size).toBe(0);
+  });
+
+  it('connects compatible ports from the keyboard', async () => {
+    const { store, user } = renderCanvas(row('transform', 'output'));
+
+    await activatePort(user, 'Transform 1', 'Output result (json)');
+    await activatePort(user, 'Output 1', 'Input value (any)');
+
+    expect(store.getState().pipeline.edges).toEqual([
+      {
+        id: 'new',
+        source: 'transform',
+        sourcePort: 'result',
+        target: 'output',
+        targetPort: 'value',
+      },
+    ]);
+  });
+
+  it('refuses to connect ports of incompatible types', async () => {
+    const { store, user } = renderCanvas(row('transform', 'llm-call'));
+
+    await activatePort(user, 'Transform 1', 'Output result (json)');
+    await activatePort(user, 'LLM Call 1', 'Input prompt (text)');
+
+    expect(store.getState().pipeline.edges).toEqual([]);
+  });
+
+  it('disables the ports a started connection cannot end on', async () => {
+    const { user } = renderCanvas(row('transform', 'llm-call', 'output'));
+    const port = (nodeName: string, portName: string) =>
+      within(screen.getByRole('group', { name: nodeName })).getByRole('button', {
+        name: portName,
+      });
+
+    await activatePort(user, 'Transform 1', 'Output result (json)');
+
+    expect(port('Output 1', 'Input value (any)')).not.toHaveAttribute('aria-disabled');
+    // Incompatible type, the node's own input, another output.
+    expect(port('LLM Call 1', 'Input prompt (text)')).toHaveAttribute('aria-disabled', 'true');
+    expect(port('Transform 1', 'Input value (text)')).toHaveAttribute('aria-disabled', 'true');
+    expect(port('LLM Call 1', 'Output response (text)')).toHaveAttribute('aria-disabled', 'true');
+
+    await activatePort(user, 'Output 1', 'Input value (any)');
+
+    expect(port('LLM Call 1', 'Input prompt (text)')).not.toHaveAttribute('aria-disabled');
   });
 });

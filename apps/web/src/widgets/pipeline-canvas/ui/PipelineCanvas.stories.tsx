@@ -1,7 +1,13 @@
-import { addNode, connect, createEmptyPipeline, type Pipeline } from '@pipeline-builder/core';
+import {
+  addNode,
+  connect,
+  createEmptyPipeline,
+  type NodeKind,
+  type Pipeline,
+} from '@pipeline-builder/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
-import { expect, waitFor } from 'storybook/test';
+import { expect, waitFor, within } from 'storybook/test';
 
 import { createPipelineStore, PipelineStoreProvider } from '@/entities/pipeline';
 
@@ -30,6 +36,18 @@ function chain(): Pipeline {
     pipeline = result.value.pipeline;
   }
   return pipeline;
+}
+
+const INPUT_TO_PROMPT = 'Input 1 value to Prompt 1 question';
+const PROMPT_TO_LLM = 'Prompt 1 prompt to LLM Call 1 prompt';
+
+/** Unconnected nodes of the given kinds in a row, with their kinds as ids. */
+function row(...kinds: NodeKind[]): Pipeline {
+  return kinds.reduce(
+    (pipeline, kind, index) =>
+      addNode(pipeline, { kind, id: kind, position: { x: index * 320, y: 0 } }).pipeline,
+    createEmptyPipeline({ id: 'draft', name: 'Story' }),
+  );
 }
 
 interface CanvasPreviewProps {
@@ -93,6 +111,12 @@ function dragNode(node: HTMLElement, by: Point): void {
   mouse('mouseup', window, { x: pickup.x + by.x, y: pickup.y + by.y });
 }
 
+/** The port button `portName` on the node `nodeName`. */
+async function findPort(canvas: HTMLElement, nodeName: string, portName: string) {
+  const node = await within(canvas).findByRole('group', { name: nodeName });
+  return within(node).getByRole('button', { name: portName });
+}
+
 const meta = {
   title: 'widgets/PipelineCanvas',
   component: CanvasPreview,
@@ -108,8 +132,8 @@ export const Default: Story = {
     for (const name of ['Input 1', 'Prompt 1', 'LLM Call 1']) {
       await expect(await canvas.findByRole('group', { name })).toBeVisible();
     }
-    await expect(canvas.getByRole('group', { name: 'Edge from input to prompt' })).toBeVisible();
-    await expect(canvas.getByRole('group', { name: 'Edge from prompt to llm' })).toBeVisible();
+    await expect(canvas.getByRole('group', { name: INPUT_TO_PROMPT })).toBeVisible();
+    await expect(canvas.getByRole('group', { name: PROMPT_TO_LLM })).toBeVisible();
   },
 };
 
@@ -137,7 +161,8 @@ export const DeleteSelectedNode: Story = {
     await waitFor(async () => {
       await expect(canvas.queryByRole('group', { name: 'Prompt 1' })).not.toBeInTheDocument();
     });
-    await expect(canvas.queryByRole('group', { name: /^Edge / })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('group', { name: INPUT_TO_PROMPT })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('group', { name: PROMPT_TO_LLM })).not.toBeInTheDocument();
     await expect(canvas.getByRole('group', { name: 'Input 1' })).toBeVisible();
     await expect(canvas.getByRole('group', { name: 'LLM Call 1' })).toBeVisible();
   },
@@ -184,5 +209,73 @@ export const SelectWithRectangle: Story = {
     });
     await expect(canvas.queryByRole('group', { name: 'Prompt 1' })).not.toBeInTheDocument();
     await expect(canvas.getByRole('group', { name: 'LLM Call 1' })).toBeVisible();
+  },
+};
+
+export const ConnectWithKeyboard: Story = {
+  args: { pipeline: row('input', 'prompt') },
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    (await findPort(canvasElement, 'Input 1', 'Output value (text)')).focus();
+    await userEvent.keyboard('{Enter}');
+    (await findPort(canvasElement, 'Prompt 1', 'Input question (text)')).focus();
+    await userEvent.keyboard('{Enter}');
+
+    await expect(await canvas.findByRole('group', { name: INPUT_TO_PROMPT })).toBeVisible();
+  },
+};
+
+export const ReplaceOccupiedInput: Story = {
+  args: {
+    pipeline: addNode(chain(), { kind: 'input', id: 'input-2', position: { x: 0, y: 240 } })
+      .pipeline,
+  },
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    (await findPort(canvasElement, 'Input 2', 'Output value (text)')).focus();
+    await userEvent.keyboard('{Enter}');
+    (await findPort(canvasElement, 'Prompt 1', 'Input question (text)')).focus();
+    await userEvent.keyboard('{Enter}');
+
+    // An input takes one edge: the new one replaces the old.
+    await expect(
+      await canvas.findByRole('group', { name: 'Input 2 value to Prompt 1 question' }),
+    ).toBeVisible();
+    await expect(canvas.queryByRole('group', { name: INPUT_TO_PROMPT })).not.toBeInTheDocument();
+  },
+};
+
+export const HighlightCompatiblePorts: Story = {
+  args: { pipeline: row('transform', 'llm-call', 'output') },
+  play: async ({ canvas, canvasElement }) => {
+    const result = await findPort(canvasElement, 'Transform 1', 'Output result (json)');
+    const prompt = await findPort(canvasElement, 'LLM Call 1', 'Input prompt (text)');
+    const output = await findPort(canvasElement, 'Output 1', 'Input value (any)');
+
+    // React Flow follows a dragged connection on the document.
+    const start = centerOf(result);
+    mouse('mousedown', result, start);
+    mouse('mousemove', document, { x: start.x + 40, y: start.y + 40 });
+
+    await waitFor(async () => {
+      await expect(prompt).toHaveAttribute('aria-disabled', 'true');
+    });
+    await expect(output).not.toHaveAttribute('aria-disabled');
+
+    // Dropped on an incompatible port, the connection is refused.
+    mouse('mousemove', document, centerOf(prompt));
+    mouse('mouseup', document, centerOf(prompt));
+    await waitFor(async () => {
+      await expect(prompt).not.toHaveAttribute('aria-disabled');
+    });
+
+    mouse('mousedown', result, start);
+    mouse('mousemove', document, { x: start.x + 40, y: start.y + 40 });
+    mouse('mousemove', document, centerOf(output));
+    mouse('mouseup', document, centerOf(output));
+    await expect(
+      await canvas.findByRole('group', { name: 'Transform 1 result to Output 1 value' }),
+    ).toBeVisible();
+    await expect(
+      canvas.queryByRole('group', { name: 'Transform 1 result to LLM Call 1 prompt' }),
+    ).not.toBeInTheDocument();
   },
 };

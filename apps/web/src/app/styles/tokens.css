@@ -66,6 +66,7 @@
   --xy-node-border-color: var(--pb-border);
   --xy-node-color: var(--pb-fg);
   --xy-edge-stroke: var(--pb-fg-muted);
+  --xy-edge-stroke-width: 2;
   --xy-edge-stroke-selected: var(--pb-accent);
   --xy-connectionline-stroke: var(--pb-accent);
   --xy-selection-background-color: oklch(from var(--pb-accent) l c h / 0.08);
@@ -78,6 +79,26 @@
   --xy-controls-button-color-hover: var(--pb-fg);
   --xy-controls-button-border-color: var(--pb-border);
   --xy-attribution-background-color: oklch(from var(--pb-surface) l c h / 0.7);
+}
+
+/*
+ * The canvas gives each edge an `edge-<port type>` class, so edges are coloured like their ports.
+ * A selected edge is drawn in the accent colour, and thicker.
+ */
+.react-flow__edge.edge-text {
+  --xy-edge-stroke: var(--pb-port-text);
+}
+.react-flow__edge.edge-number {
+  --xy-edge-stroke: var(--pb-port-number);
+}
+.react-flow__edge.edge-json {
+  --xy-edge-stroke: var(--pb-port-json);
+}
+.react-flow__edge.edge-any {
+  --xy-edge-stroke: var(--pb-port-any);
+}
+.react-flow__edge.selected {
+  --xy-edge-stroke-width: 3;
 }
 
 /* React Flow's grey (#999) attribution link fails WCAG contrast on a plain surface. */

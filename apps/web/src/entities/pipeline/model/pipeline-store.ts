@@ -1,5 +1,7 @@
 import {
   addNode,
+  connect,
+  type ConnectionCandidate,
   findNode,
   moveNodes,
   type NodeKind,
@@ -7,6 +9,7 @@ import {
   type PipelineNode,
   type Position,
   removeElements,
+  validateConnection,
 } from '@pipeline-builder/core';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
@@ -52,6 +55,10 @@ export interface PipelineActions {
   moveNodes: (positions: ReadonlyMap<string, Position>) => void;
   /** Removes nodes and edges, with every edge of a removed node, and forgets their view state. */
   removeElements: (ids: ElementIds) => void;
+  /** Whether an output may be connected to an input; an occupied input may be. */
+  canConnect: (candidate: ConnectionCandidate) => boolean;
+  /** Connects an output to an input, replacing the edge that occupied the input. */
+  connect: (candidate: ConnectionCandidate) => void;
   updateSelection: (changes: SelectionChanges) => void;
   setMeasured: (sizes: ReadonlyMap<string, Size>) => void;
 }
@@ -59,7 +66,7 @@ export interface PipelineActions {
 export type PipelineStore = StoreApi<PipelineState & PipelineActions>;
 
 export interface PipelineStoreOptions {
-  /** Generates ids for new nodes; random UUIDs by default. */
+  /** Generates ids for new nodes and edges; random UUIDs by default. */
   readonly createId?: () => string;
 }
 
@@ -115,6 +122,22 @@ export function createPipelineStore(
         selectedEdgeIds: filterSet(state.selectedEdgeIds, (id) => edgeIds.has(id)),
         measured: filterKeys(state.measured, (id) => nodeIds.has(id)),
         dragPositions: filterKeys(state.dragPositions, (id) => nodeIds.has(id)),
+      });
+    },
+
+    canConnect: (candidate) => validateConnection(get().pipeline, candidate).ok,
+
+    connect: (candidate) => {
+      const state = get();
+      const result = connect(state.pipeline, candidate, createId());
+      if (!result.ok || result.value.pipeline === state.pipeline) return;
+      const { pipeline: next, replacedEdge } = result.value;
+      set({
+        pipeline: next,
+        selectedEdgeIds:
+          replacedEdge === null
+            ? state.selectedEdgeIds
+            : filterSet(state.selectedEdgeIds, (id) => id !== replacedEdge.id),
       });
     },
 
