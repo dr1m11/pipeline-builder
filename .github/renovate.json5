@@ -29,11 +29,6 @@
       allowedVersions: '<25',
     },
     {
-      description: 'jsdom 30 needs Node >= 24.15; lift once local environments are upgraded',
-      matchPackageNames: ['jsdom'],
-      allowedVersions: '<30',
-    },
-    {
       groupName: 'react',
       matchPackageNames: ['react', 'react-dom', '@types/react', '@types/react-dom'],
     },

@@ -8,7 +8,7 @@
   "type": "module",
   "packageManager": "pnpm@10.30.3",
   "engines": {
-    "node": ">=24.11.0"
+    "node": ">=24.15.0"
   },
   "scripts": {
     "dev": "pnpm --filter @pipeline-builder/web dev",
