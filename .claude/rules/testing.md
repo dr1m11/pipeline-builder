@@ -1,8 +1,8 @@
 ---
 paths:
-  - "**/*.test.ts"
-  - "**/*.test.tsx"
-  - "apps/web/e2e/**"
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - 'apps/web/e2e/**'
 ---
 
 # Testing conventions

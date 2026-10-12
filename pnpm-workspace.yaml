@@ -1,0 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Single source of truth for versions shared across workspace packages.
+# TypeScript is capped below 6.1 until typescript-eslint supports newer versions (see docs/adr/0002).
+catalog:
+  '@types/node': 24.19.2
+  typescript: 6.0.3
+
+engineStrict: true
+saveExact: true

@@ -15,14 +15,37 @@ import {
 } from './_lib.mjs';
 
 const PRETTIER_EXTENSIONS = new Set([
-  '.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs',
-  '.json', '.jsonc', '.md', '.mdx', '.css', '.yml', '.yaml', '.html',
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.cts',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.json',
+  '.jsonc',
+  '.md',
+  '.mdx',
+  '.css',
+  '.yml',
+  '.yaml',
+  '.html',
 ]);
 const ESLINT_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
 const ESLINT_CONFIGS = ['eslint.config.js', 'eslint.config.mjs', 'eslint.config.ts'];
 const MAX_REPORTED_ERRORS = 30;
 
-/** Turn ESLint JSON output into `file:line:col message (rule)` lines, errors only. */
+/**
+ * @typedef {{ severity: number, line?: number, column?: number, message: string, ruleId?: string | null }} EslintMessage
+ * @typedef {{ filePath: string, messages: EslintMessage[] }} EslintResult
+ */
+
+/**
+ * Turn ESLint JSON output into `file:line:col message (rule)` lines, errors only.
+ * @param {EslintResult[]} results
+ * @param {string} [root]
+ */
 export function formatEslintErrors(results, root = PROJECT_DIR) {
   return results.flatMap((result) =>
     result.messages
@@ -47,7 +70,9 @@ if (isMain(import.meta.url)) {
   if (prettier && PRETTIER_EXTENSIONS.has(extension)) {
     const result = runNode(prettier, ['--write', '--ignore-unknown', '--log-level', 'warn', rel]);
     if (result.status !== 0) {
-      problems.push(`Prettier could not format ${rel}:\n${firstLines(result.stderr || result.stdout, 15)}`);
+      problems.push(
+        `Prettier could not format ${rel}:\n${firstLines(result.stderr || result.stdout, 15)}`,
+      );
     }
   }
 
@@ -57,9 +82,11 @@ if (isMain(import.meta.url)) {
     const result = runNode(eslint, [
       '--fix',
       '--cache',
-      '--cache-location', 'node_modules/.cache/eslint/',
+      '--cache-location',
+      'node_modules/.cache/eslint/',
       '--no-warn-ignored',
-      '--format', 'json',
+      '--format',
+      'json',
       rel,
     ]);
     if (result.status === 0 || result.status === 1) {
@@ -67,11 +94,16 @@ if (isMain(import.meta.url)) {
         const errors = formatEslintErrors(JSON.parse(result.stdout));
         if (errors.length > 0) {
           const shown = errors.slice(0, MAX_REPORTED_ERRORS).join('\n');
-          const more = errors.length > MAX_REPORTED_ERRORS ? `\n… ${errors.length - MAX_REPORTED_ERRORS} more` : '';
+          const more =
+            errors.length > MAX_REPORTED_ERRORS
+              ? `\n… ${errors.length - MAX_REPORTED_ERRORS} more`
+              : '';
           problems.push(`ESLint errors remain in ${rel} after --fix:\n${shown}${more}`);
         }
       } catch {
-        problems.push(`ESLint output for ${rel} was not valid JSON:\n${firstLines(result.stdout, 10)}`);
+        problems.push(
+          `ESLint output for ${rel} was not valid JSON:\n${firstLines(result.stdout, 10)}`,
+        );
       }
     } else {
       problems.push(`ESLint failed on ${rel}:\n${firstLines(result.stderr || result.stdout, 15)}`);

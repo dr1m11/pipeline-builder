@@ -12,7 +12,10 @@ describe('checkCommand', () => {
   });
 
   it('allows a plain conventional commit on a feature branch', () => {
-    assert.equal(checkCommand('git add -A && git commit -m "feat(core): add pipeline type"', onFeature), null);
+    assert.equal(
+      checkCommand('git add -A && git commit -m "feat(core): add pipeline type"', onFeature),
+      null,
+    );
   });
 
   it('blocks Claude co-author trailers in commit messages', () => {
@@ -21,17 +24,24 @@ describe('checkCommand', () => {
   });
 
   it('blocks "Generated with Claude Code" in PR bodies', () => {
-    const command = 'gh pr create --title "feat: x" --body "🤖 Generated with [Claude Code](https://claude.com/claude-code)"';
+    const command =
+      'gh pr create --title "feat: x" --body "🤖 Generated with [Claude Code](https://claude.com/claude-code)"';
     assert.match(checkCommand(command, onFeature) ?? '', /AI attribution/);
   });
 
   it('blocks --no-verify and -n on commit', () => {
-    assert.match(checkCommand('git commit --no-verify -m "fix: x"', onFeature) ?? '', /--no-verify/);
+    assert.match(
+      checkCommand('git commit --no-verify -m "fix: x"', onFeature) ?? '',
+      /--no-verify/,
+    );
     assert.match(checkCommand('git commit -nm "fix: x"', onFeature) ?? '', /--no-verify/);
   });
 
   it('does not treat flags inside the message as real flags', () => {
-    assert.equal(checkCommand('git commit -m "docs: explain the -n flag and --no-verify"', onFeature), null);
+    assert.equal(
+      checkCommand('git commit -m "docs: explain the -n flag and --no-verify"', onFeature),
+      null,
+    );
   });
 
   it('blocks commits on main once the repo has a remote', () => {
@@ -39,7 +49,10 @@ describe('checkCommand', () => {
   });
 
   it('allows commits on main during local bootstrap (no origin yet)', () => {
-    assert.equal(checkCommand('git commit -m "chore: bootstrap"', { branch: 'main', hasOrigin: false }), null);
+    assert.equal(
+      checkCommand('git commit -m "chore: bootstrap"', { branch: 'main', hasOrigin: false }),
+      null,
+    );
   });
 
   it('allows committing on main when the same command creates a branch first', () => {
@@ -60,8 +73,14 @@ describe('checkCommand', () => {
 
   it('requires a conventional --title for gh pr create', () => {
     assert.match(checkCommand('gh pr create --fill', onFeature) ?? '', /--title/);
-    assert.match(checkCommand('gh pr create --title "Add canvas" --body x', onFeature) ?? '', /Conventional/);
-    assert.equal(checkCommand('gh pr create --title "feat(canvas): add palette" --body-file -', onFeature), null);
+    assert.match(
+      checkCommand('gh pr create --title "Add canvas" --body x', onFeature) ?? '',
+      /Conventional/,
+    );
+    assert.equal(
+      checkCommand('gh pr create --title "feat(canvas): add palette" --body-file -', onFeature),
+      null,
+    );
   });
 });
 

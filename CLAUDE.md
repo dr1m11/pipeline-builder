@@ -5,18 +5,18 @@ Product scope: `docs/product-spec.md`. Stages and current stage: `docs/roadmap.m
 
 ## Commands (run from the repo root)
 
-| Command | What it does |
-| --- | --- |
-| `pnpm dev` | Vite dev server for `apps/web` |
-| `pnpm verify` | format check → lint → Steiger → typecheck → unit tests → hook tests → build. **Must be green before a PR** |
-| `pnpm verify:full` | `verify` + Storybook tests + Playwright e2e |
-| `pnpm lint` / `pnpm lint:fsd` | ESLint / Steiger (FSD boundaries) |
-| `pnpm typecheck` | `tsc` across the workspace |
-| `pnpm test` / `pnpm test:coverage` | Vitest projects `core` + `web` (core coverage gate 80%) |
-| `pnpm test:storybook` | Stories as tests in Vitest browser mode |
-| `pnpm test:e2e` | Playwright against `vite preview` |
-| `pnpm storybook` | Storybook on :6006 (also enables the `storybook` MCP server) |
-| `pnpm format` | Prettier write |
+| Command                            | What it does                                                                                               |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                         | Vite dev server for `apps/web`                                                                             |
+| `pnpm verify`                      | format check → lint → Steiger → typecheck → unit tests → hook tests → build. **Must be green before a PR** |
+| `pnpm verify:full`                 | `verify` + Storybook tests + Playwright e2e                                                                |
+| `pnpm lint` / `pnpm lint:fsd`      | ESLint / Steiger (FSD boundaries)                                                                          |
+| `pnpm typecheck`                   | `tsc` across the workspace                                                                                 |
+| `pnpm test` / `pnpm test:coverage` | Vitest projects `core` + `web` (core coverage gate 80%)                                                    |
+| `pnpm test:storybook`              | Stories as tests in Vitest browser mode                                                                    |
+| `pnpm test:e2e`                    | Playwright against `vite preview`                                                                          |
+| `pnpm storybook`                   | Storybook on :6006 (also enables the `storybook` MCP server)                                               |
+| `pnpm format`                      | Prettier write                                                                                             |
 
 ## Monorepo
 
