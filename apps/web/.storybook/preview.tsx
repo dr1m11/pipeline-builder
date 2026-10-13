@@ -3,6 +3,7 @@ import '../src/app/styles/index.css';
 import { withThemeByDataAttribute } from '@storybook/addon-themes';
 import type { Preview } from '@storybook/react-vite';
 
+import { ToastProvider } from '../src/shared/ui/toast';
 import { TooltipProvider } from '../src/shared/ui/tooltip';
 
 const preview: Preview = {
@@ -16,9 +17,12 @@ const preview: Preview = {
     a11y: { test: 'error' },
   },
   decorators: [
+    // The same providers as the app, so any story can use tooltips and `useToast`.
     (Story) => (
       <TooltipProvider delayDuration={0}>
-        <Story />
+        <ToastProvider>
+          <Story />
+        </ToastProvider>
       </TooltipProvider>
     ),
     withThemeByDataAttribute({

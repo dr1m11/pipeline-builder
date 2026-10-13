@@ -59,6 +59,14 @@ if (!('DOMMatrixReadOnly' in globalThis)) {
 if (!('elementFromPoint' in document)) {
   Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => null });
 }
+// jsdom has no pointer capture. Radix Toast uses it on every pointer up in a toast (swipe to dismiss).
+if (!('hasPointerCapture' in Element.prototype)) {
+  Object.defineProperties(Element.prototype, {
+    hasPointerCapture: { configurable: true, value: () => false },
+    setPointerCapture: { configurable: true, value: () => undefined },
+    releasePointerCapture: { configurable: true, value: () => undefined },
+  });
+}
 // Deliberately global: React Flow skips nodes that measure 0×0, and no other component under test
 // reads offset sizes.
 Object.defineProperties(HTMLElement.prototype, {

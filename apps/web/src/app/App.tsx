@@ -1,4 +1,5 @@
 import { EditorPage } from '@/pages/editor';
+import { ToastProvider } from '@/shared/ui/toast';
 import { TooltipProvider } from '@/shared/ui/tooltip';
 
 import { DesktopOnlyGate } from './device-support';
@@ -10,9 +11,11 @@ export function App() {
     <AppErrorBoundary>
       <ThemeSync />
       <TooltipProvider>
-        <DesktopOnlyGate>
-          <EditorPage />
-        </DesktopOnlyGate>
+        <ToastProvider>
+          <DesktopOnlyGate>
+            <EditorPage />
+          </DesktopOnlyGate>
+        </ToastProvider>
       </TooltipProvider>
     </AppErrorBoundary>
   );

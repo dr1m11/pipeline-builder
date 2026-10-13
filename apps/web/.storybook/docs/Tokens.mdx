@@ -21,6 +21,7 @@ compare.
     ['warning', 'bg-warning', 'Warnings; at least 3:1 against surfaces'],
     ['success', 'bg-success', 'Completed states'],
     ['focus', 'bg-focus', 'Focus rings'],
+    ['overlay', 'bg-overlay', 'Translucent scrim behind dialogs'],
   ].map(([name, swatch, usage]) => (
     <div key={name} className="overflow-hidden rounded-lg border border-border bg-surface text-fg">
       <div className={`h-14 ${swatch}`} />
@@ -68,7 +69,16 @@ canvas gives it an `edge-<type>` class, which `tokens.css` maps to React Flow's 
 | `danger`  | `bg-danger`, `text-danger-fg`                          |
 | `warning` | `bg-warning`, `text-warning-fg`                        |
 | `focus`   | `outline-focus`, `ring-focus`                          |
+| `overlay` | `bg-overlay`                                           |
 | `port-*`  | `bg-port-text`, `border-port-json`, …                  |
 
 Adding a colour means adding a variable for both themes in `tokens.css` and mapping it in the
 `@theme inline` block of `index.css`.
+
+## Motion
+
+Dialogs, menus and toasts animate in with `animate-overlay-in`, `animate-pop-in` and
+`animate-toast-in`, defined in the `@theme` block of `index.css`. Components apply them with the
+`motion-safe:` variant, so nothing moves when the user prefers reduced motion. Closing is instant.
+Only the empty scrim fades; content moves without fading, because axe checks contrast at whatever
+opacity it finds.
