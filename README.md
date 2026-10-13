@@ -9,7 +9,7 @@
 
 **[Live demo](https://pipeline-builder.marat-gabdrashitov17.workers.dev)** · **[Storybook](https://dr1m11.github.io/pipeline-builder/)** · **[Roadmap](docs/roadmap.md)** · **[Architecture decisions](docs/adr/README.md)**
 
-> 🚧 Work in progress. Stages A1 (foundation) and A2 (canvas) are done; the MVP lands with stage A4. Progress is tracked in [milestones](https://github.com/dr1m11/pipeline-builder/milestones).
+> 🚧 Work in progress. Stages A1 (foundation), A2 (canvas) and A3 (validation and properties) are done; the MVP lands with stage A4. Progress is tracked in [milestones](https://github.com/dr1m11/pipeline-builder/milestones).
 
 ## Features
 
@@ -19,14 +19,14 @@ Available now:
 - Node palette: drag a node onto the canvas or add it from the keyboard
 - Shift-drag a rectangle or Ctrl/⌘-click to select several nodes, then move or delete them together; minimap, zoom and pan
 - Keyboard and screen-reader support on the canvas: nodes, ports and edges have readable names, and ports connect with Enter
+- Live graph validation: cycles, type mismatches, unconnected inputs, invalid settings and nodes whose result reaches no Output are marked on nodes, ports and edges; edges to a removed template variable stay drawn and reported; a Problems list jumps to the node, edge or field to fix
+- Properties panel generated from each node type's Zod schema (React Hook Form): changes apply as you type, with the same messages as on the canvas
 - Light/dark themes without a flash, desktop-only gate
 - UI kit on Radix primitives and design tokens, documented in Storybook
 - Every pull request gets its own preview deployment
 
-Planned for the MVP (A3–A4):
+Planned for the MVP (A4):
 
-- Graph validation (cycles, type mismatches, unreachable nodes) shown on the canvas
-- Properties panel generated from node schemas (React Hook Form + Zod)
 - Undo / redo, copy / paste, keyboard shortcuts
 - JSON import / export with schema migrations
 
@@ -34,7 +34,7 @@ Later: execution with token streaming over SSE and cancellation (A5), auto-layou
 
 ## Tech stack
 
-React 19 · TypeScript (strict) · Vite · React Flow · Radix UI · Tailwind CSS · Vitest · Testing Library · Playwright · Storybook · pnpm workspaces · Cloudflare Workers
+React 19 · TypeScript (strict) · Vite · React Flow · React Hook Form · Zod · Radix UI · Tailwind CSS · Vitest · Testing Library · Playwright · Storybook · pnpm workspaces · Cloudflare Workers
 
 ## Architecture
 
@@ -42,8 +42,8 @@ React 19 · TypeScript (strict) · Vite · React Flow · Radix UI · Tailwind CS
 apps/web/              React SPA, Feature-Sliced Design (checked by Steiger)
   src/app/             composition root: error handling, device support, theme, global styles
   src/pages/           editor page
-  src/widgets/         pipeline canvas
-  src/features/        user actions (add-node, toggle-theme)
+  src/widgets/         pipeline canvas, inspector
+  src/features/        user actions (add-node, edit-node-properties, review-problems, toggle-theme)
   src/entities/        pipeline store, node cards
   src/shared/          UI kit, helpers, config
 packages/core/         framework-free domain: graph model, validation, engine, undo, migrations
@@ -54,6 +54,7 @@ docs/adr/              architecture decision records
 - **Framework-free core.** Domain logic lives in `packages/core`, which cannot import React or browser APIs (lint rule plus a tsconfig without the DOM lib) and has its own 80% coverage gate. See [ADR 0001](docs/adr/0001-monorepo-with-fsd-app-and-framework-free-core.md).
 - **One source of truth for the graph.** The core `Pipeline` document lives in a zustand store and changes only through pure core operations; React Flow is a controlled view of it, and a drag reaches the document once, on drop. See [ADR 0006](docs/adr/0006-canvas-state-core-document-and-react-flow-view.md).
 - **Typed ports.** Every node kind declares its ports in core, and one rule decides which ports may connect. The canvas checks it while you connect and again before it adds an edge. See [ADR 0005](docs/adr/0005-node-catalogue-and-typed-ports.md).
+- **One set of rules for forms and validation.** Each node kind describes its data with Zod schemas in core; the properties form and graph validation check the same rules, so the form and the canvas always agree. See [ADR 0007](docs/adr/0007-zod-schemas-for-node-data-in-core.md) and [ADR 0008](docs/adr/0008-graph-validation.md).
 - **Design tokens** as CSS variables exposed through Tailwind utilities; components never use raw colours. See [ADR 0004](docs/adr/0004-ui-stack-radix-and-tailwind.md).
 - **Hosting** on Cloudflare Workers static assets, with the SSE proxy and collaboration backend planned on the same platform. See [ADR 0003](docs/adr/0003-hosting-on-cloudflare-workers.md).
 
