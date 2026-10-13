@@ -20,6 +20,7 @@
   --color-danger: var(--pb-danger);
   --color-danger-fg: var(--pb-danger-fg);
   --color-warning: var(--pb-warning);
+  --color-warning-fg: var(--pb-warning-fg);
   --color-success: var(--pb-success);
   --color-focus: var(--pb-focus);
   --shadow-elevated: var(--pb-shadow);
