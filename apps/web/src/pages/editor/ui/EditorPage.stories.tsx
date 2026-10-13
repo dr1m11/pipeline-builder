@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect } from 'storybook/test';
+import { expect, within } from 'storybook/test';
 
 import { EditorPage } from './EditorPage';
 
@@ -68,6 +68,20 @@ export const DropNodeOnCanvas: Story = {
     await expect(Math.abs(card.x - dropPoint.x)).toBeLessThan(40);
     await expect(Math.abs(card.y - dropPoint.y)).toBeLessThan(40);
     await expect(node.getBoundingClientRect().width).toBeCloseTo(240, 0);
+  },
+};
+
+export const RenameInInspector: Story = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('button', { name: 'Add Prompt' }));
+    const inspector = canvas.getByRole('complementary', { name: 'Inspector' });
+    const name = within(inspector).getByRole('textbox', { name: 'Name' });
+
+    await userEvent.click(name);
+    await userEvent.keyboard('{Control>}a{/Control}Ask the model');
+
+    // The canvas follows the form as it is typed.
+    await expect(await canvas.findByRole('group', { name: 'Ask the model' })).toBeVisible();
   },
 };
 

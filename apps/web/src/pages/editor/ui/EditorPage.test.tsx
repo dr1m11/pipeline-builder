@@ -34,6 +34,31 @@ describe('EditorPage', () => {
     expect(screen.queryByText(hint)).not.toBeInTheDocument();
   });
 
+  it('shows the properties of a node it adds', async () => {
+    const { user } = renderPage();
+    const inspector = screen.getByRole('complementary', { name: 'Inspector' });
+    expect(
+      within(inspector).getByText('Select a node to edit its properties.'),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+
+    expect(within(inspector).getByRole('textbox', { name: 'Name' })).toHaveValue('Prompt 1');
+    expect(within(inspector).getByRole('textbox', { name: 'Template' })).toBeInTheDocument();
+  });
+
+  it('edits text in a field without deleting the selected node', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+    const name = screen.getByRole('textbox', { name: 'Name' });
+
+    await user.click(name);
+    await user.keyboard('{Backspace}{Delete}{Backspace}');
+
+    expect(name).toHaveValue('Prompt');
+    expect(await screen.findByRole('group', { name: 'Prompt' })).toBeInTheDocument();
+  });
+
   it('links to the source code in a new tab', () => {
     renderPage();
 

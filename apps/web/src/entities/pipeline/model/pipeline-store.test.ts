@@ -184,6 +184,51 @@ describe('createPipelineStore', () => {
     expect(state.selectedEdgeIds.size).toBe(0);
   });
 
+  it('changes node data, keeping edges whose ports disappear', () => {
+    const { store, listener } = storeWithListener();
+
+    store.getState().updateNodeData('prompt', { template: 'Summarize {{text}}' });
+
+    const { pipeline } = store.getState();
+    expect(pipeline.nodes.find((node) => node.id === 'prompt')?.data).toEqual({
+      template: 'Summarize {{text}}',
+    });
+    expect(pipeline.edges.map((edge) => edge.id)).toEqual(['input-prompt', 'prompt-llm']);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps node data that only breaks a rule', () => {
+    const { store } = storeWithListener();
+
+    store.getState().updateNodeData('llm', { temperature: 5 });
+
+    expect(store.getState().pipeline.nodes.find((node) => node.id === 'llm')?.data).toMatchObject({
+      temperature: 5,
+    });
+  });
+
+  it('renames a node with a trimmed label', () => {
+    const { store } = storeWithListener();
+
+    store.getState().renameNode('prompt', '  Summarize  ');
+
+    expect(store.getState().pipeline.nodes.find((node) => node.id === 'prompt')?.label).toBe(
+      'Summarize',
+    );
+  });
+
+  it('ignores data and labels that do not fit', () => {
+    const { store, listener } = storeWithListener();
+
+    store.getState().updateNodeData('llm', { temperature: 'warm' });
+    store.getState().updateNodeData('llm', { colour: 'red' });
+    store.getState().updateNodeData('missing', { template: 'x' });
+    store.getState().renameNode('prompt', '   ');
+    store.getState().renameNode('missing', 'Name');
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('selects and deselects nodes and edges', () => {
     const { store } = storeWithListener();
 
@@ -250,6 +295,8 @@ describe('createPipelineStore', () => {
     actions.updateSelection({ nodes: new Map([['prompt', false]]) });
     actions.select({ nodeIds: ['input'] });
     actions.setMeasured(new Map([['input', { width: 240, height: 96 }]]));
+    actions.updateNodeData('prompt', { template: 'Answer the question: {{question}}' });
+    actions.renameNode('prompt', 'Prompt 1');
 
     expect(listener).not.toHaveBeenCalled();
   });

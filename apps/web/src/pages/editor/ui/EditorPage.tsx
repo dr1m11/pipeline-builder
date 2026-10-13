@@ -8,6 +8,7 @@ import { NodePalette, useNodeDrop } from '@/features/add-node';
 import { ThemeToggle } from '@/features/toggle-theme';
 import { REPOSITORY_URL } from '@/shared/config';
 import { IconButton } from '@/shared/ui/icon-button';
+import { Inspector } from '@/widgets/inspector';
 import { PipelineCanvas } from '@/widgets/pipeline-canvas';
 
 export function EditorPage() {
@@ -31,7 +32,7 @@ export function EditorPage() {
               </IconButton>
             </div>
           </header>
-          <div className="grid min-h-0 grid-cols-[16rem_1fr]">
+          <div className="grid min-h-0 grid-cols-[16rem_1fr_20rem]">
             <aside
               aria-label="Node palette"
               className="overflow-y-auto border-r border-border bg-surface"
@@ -39,6 +40,12 @@ export function EditorPage() {
               <NodePalette />
             </aside>
             <CanvasArea />
+            <aside
+              aria-label="Inspector"
+              className="overflow-y-auto border-l border-border bg-surface"
+            >
+              <Inspector />
+            </aside>
           </div>
         </div>
       </ReactFlowProvider>
