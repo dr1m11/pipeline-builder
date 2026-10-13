@@ -9,6 +9,8 @@ import {
   type PipelineNode,
   type Position,
   removeElements,
+  renameNode,
+  updateNodeData,
   validateConnection,
 } from '@pipeline-builder/core';
 import { createStore, type StoreApi } from 'zustand/vanilla';
@@ -59,6 +61,13 @@ export interface PipelineActions {
   canConnect: (candidate: ConnectionCandidate) => boolean;
   /** Connects an output to an input, replacing the edge that occupied the input. */
   connect: (candidate: ConnectionCandidate) => void;
+  /**
+   * Changes fields of a node's data. Changes that do not fit the kind's data (an unknown field, a
+   * value of the wrong type) are ignored; values that only break a rule are kept for validation.
+   */
+  updateNodeData: (nodeId: string, changes: Readonly<Record<string, unknown>>) => void;
+  /** Renames a node; the label is trimmed, and a blank or too long label is ignored. */
+  renameNode: (nodeId: string, label: string) => void;
   updateSelection: (changes: SelectionChanges) => void;
   /** Makes these elements, and only these, the selection. */
   select: (ids: ElementIds) => void;
@@ -141,6 +150,18 @@ export function createPipelineStore(
             ? state.selectedEdgeIds
             : filterSet(state.selectedEdgeIds, (id) => id !== replacedEdge.id),
       });
+    },
+
+    updateNodeData: (nodeId, changes) => {
+      const { pipeline: current } = get();
+      const result = updateNodeData(current, nodeId, changes);
+      if (result.ok && result.value !== current) set({ pipeline: result.value });
+    },
+
+    renameNode: (nodeId, label) => {
+      const { pipeline: current } = get();
+      const result = renameNode(current, nodeId, label);
+      if (result.ok && result.value !== current) set({ pipeline: result.value });
     },
 
     updateSelection: (changes) => {
