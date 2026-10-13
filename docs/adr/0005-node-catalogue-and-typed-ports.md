@@ -31,7 +31,7 @@ Ports have one of four types — `text`, `number`, `json`, `any`. An output may 
 - One pure compatibility function serves the canvas, validation and the engine.
 - Derived ports cannot drift from node data, but every reader goes through `getNodePorts`, and the canvas must refresh handle positions when a node's ports change (A3).
 - `any` (Condition branches, Output, `get-field`) turns type checking off downstream. Passing the input type through Condition is a possible refinement.
-- Node data are plain TypeScript types. If A3 generates forms from Zod schemas, the schemas must infer the same types, and Zod in core needs its own ADR.
+- Node data are plain TypeScript types. If A3 generates forms from Zod schemas, the schemas must infer the same types, and Zod in core needs its own ADR ([0007](./0007-zod-schemas-for-node-data-in-core.md)).
 
 ## Alternatives considered
 

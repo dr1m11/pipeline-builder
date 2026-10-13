@@ -1,4 +1,7 @@
+import * as z from 'zod';
+
 import type { NodePorts } from '../ports';
+import { isBlank, REQUIRED_MESSAGE } from './field-rules';
 import type { NodeDefinition } from './node-definition';
 
 export const CONDITION_OPERATORS = ['contains', 'equals', 'is-empty'] as const;
@@ -12,6 +15,21 @@ export interface ConditionNodeData {
   /** Value the input is compared with; ignored by `is-empty`. */
   readonly operand: string;
 }
+
+export const CONDITION_DATA_SCHEMA = z.object({
+  operator: z.enum(CONDITION_OPERATORS),
+  operand: z.string(),
+});
+
+function usesOperand(data: ConditionNodeData): boolean {
+  return data.operator !== 'is-empty';
+}
+
+export const CONDITION_RULES_SCHEMA = CONDITION_DATA_SCHEMA.superRefine((data, ctx) => {
+  if (usesOperand(data) && isBlank(data.operand)) {
+    ctx.addIssue({ code: 'custom', message: REQUIRED_MESSAGE, path: ['operand'] });
+  }
+});
 
 const PORTS: NodePorts = {
   inputs: [{ id: 'value', label: 'value', type: 'any', required: true }],
@@ -27,4 +45,16 @@ export const CONDITION_DEFINITION: NodeDefinition<ConditionNodeData> = {
   description: 'Sends the value down the "true" or "false" branch.',
   createData: () => ({ operator: 'contains', operand: '' }),
   getPorts: () => PORTS,
+  dataSchema: CONDITION_DATA_SCHEMA,
+  rulesSchema: CONDITION_RULES_SCHEMA,
+  fields: {
+    operator: {
+      label: 'Operator',
+      optionLabels: { contains: 'Contains', equals: 'Equals', 'is-empty': 'Is empty' },
+    },
+    operand: {
+      label: 'Compare with',
+      appliesWhen: usesOperand,
+    },
+  },
 };

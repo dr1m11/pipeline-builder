@@ -1,3 +1,5 @@
+import * as z from 'zod';
+
 import type { NodePorts } from '../ports';
 import type { NodeDefinition } from './node-definition';
 
@@ -12,6 +14,10 @@ export interface OutputNodeData {
   readonly format: OutputFormat;
 }
 
+export const OUTPUT_DATA_SCHEMA = z.object({
+  format: z.enum(OUTPUT_FORMATS),
+});
+
 const PORTS: NodePorts = {
   inputs: [{ id: 'value', label: 'value', type: 'any', required: true }],
   outputs: [],
@@ -23,4 +29,10 @@ export const OUTPUT_DEFINITION: NodeDefinition<OutputNodeData> = {
   description: 'Shows a result of the pipeline.',
   createData: () => ({ format: 'text' }),
   getPorts: () => PORTS,
+  dataSchema: OUTPUT_DATA_SCHEMA,
+  // Every format is valid, so the shape is all there is to check.
+  rulesSchema: OUTPUT_DATA_SCHEMA,
+  fields: {
+    format: { label: 'Format', optionLabels: { text: 'Plain text', markdown: 'Markdown' } },
+  },
 };

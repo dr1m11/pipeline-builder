@@ -89,6 +89,13 @@ export default defineConfig(
   {
     files: ['**/*.test.{ts,tsx}'],
     extends: [vitest.configs.recommended],
+    rules: {
+      // Type tests assert with `expectTypeOf`, which `tsc` checks (core schemas vs data types).
+      'vitest/expect-expect': [
+        'error',
+        { assertFunctionNames: ['expect', 'assert', 'expectTypeOf'] },
+      ],
+    },
   },
   {
     files: ['apps/web/e2e/**/*.ts'],
