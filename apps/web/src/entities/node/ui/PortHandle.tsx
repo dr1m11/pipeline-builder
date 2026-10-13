@@ -8,7 +8,7 @@ import {
   useNodeId,
   useStore,
 } from '@xyflow/react';
-import { type KeyboardEvent, useMemo } from 'react';
+import { type KeyboardEvent, useId, useMemo } from 'react';
 
 import { cn } from '@/shared/lib/cn';
 
@@ -61,17 +61,27 @@ function selectConnectionRole(nodeId: string | null, portId: string, type: Handl
   };
 }
 
+/** What is wrong with a port: a required input without an edge, or a port the node lost. */
+export type PortProblem = 'unconnected' | 'removed';
+
 export interface PortHandleProps {
   port: PortDefinition;
   direction: 'input' | 'output';
+  problem?: PortProblem | undefined;
 }
+
+const HANDLE_CLASSES =
+  'nokey flex size-6 items-center justify-center rounded-full border-0 bg-transparent transition-opacity';
 
 /**
  * Connection point of a port: a coloured dot inside a 24px hit area. Enter or Space works like a
  * click, so a connection can be started and completed from the keyboard. While a connection is
  * being made, the ports it can end on are highlighted and the others dimmed and marked disabled.
+ * An unconnected required input is ringed and described as "Not connected". A removed port is a
+ * placeholder that only keeps its edges drawn: it cannot be connected or focused, and the node's
+ * description reports it.
  */
-export function PortHandle({ port, direction }: PortHandleProps) {
+export function PortHandle({ port, direction, problem }: PortHandleProps) {
   const isInput = direction === 'input';
   const type: HandleType = isInput ? 'target' : 'source';
   const nodeId = useNodeId();
@@ -80,7 +90,24 @@ export function PortHandle({ port, direction }: PortHandleProps) {
     [nodeId, port.id, type],
   );
   const role = useStore(selectRole);
+  const descriptionId = useId();
 
+  if (problem === 'removed') {
+    return (
+      <Handle
+        id={port.id}
+        type={type}
+        position={isInput ? Position.Left : Position.Right}
+        isConnectable={false}
+        aria-hidden
+        className={cn(HANDLE_CLASSES, 'cursor-default')}
+      >
+        <span className="pointer-events-none size-2.5 rounded-full border-2 border-dashed border-danger bg-surface" />
+      </Handle>
+    );
+  }
+
+  const unconnected = problem === 'unconnected';
   return (
     <Handle
       id={port.id}
@@ -89,18 +116,29 @@ export function PortHandle({ port, direction }: PortHandleProps) {
       role="button"
       tabIndex={0}
       aria-label={`${isInput ? 'Input' : 'Output'} ${port.label} (${port.type})`}
+      aria-describedby={unconnected ? descriptionId : undefined}
       aria-disabled={role === 'incompatible' ? true : undefined}
       onKeyDown={activateOnEnterOrSpace}
       // `nokey` stops React Flow from treating these keys as node shortcuts (select, move, delete).
       className={cn(
-        'nokey flex size-6 items-center justify-center rounded-full border-0 bg-transparent transition-opacity focus-visible:outline-2 focus-visible:outline-focus',
+        HANDLE_CLASSES,
+        'focus-visible:outline-2 focus-visible:outline-focus',
         ROLE_CLASSES[role],
       )}
     >
       <span
         aria-hidden
-        className={cn('pointer-events-none size-2.5 rounded-full border-2', DOT_CLASSES[port.type])}
+        className={cn(
+          'pointer-events-none size-2.5 rounded-full border-2',
+          DOT_CLASSES[port.type],
+          unconnected && 'ring-2 ring-danger ring-offset-1 ring-offset-surface',
+        )}
       />
+      {unconnected && (
+        <span id={descriptionId} className="sr-only">
+          Not connected
+        </span>
+      )}
     </Handle>
   );
 }

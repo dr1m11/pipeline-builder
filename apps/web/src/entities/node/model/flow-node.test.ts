@@ -1,9 +1,18 @@
-import { createNode } from '@pipeline-builder/core';
+import { createNode, EMPTY_ISSUES, type ValidationIssue } from '@pipeline-builder/core';
 import { describe, expect, it } from 'vitest';
 
-import { PIPELINE_NODE_TYPE, toFlowNode } from './flow-node';
+import { nodeDescriptionId, PIPELINE_NODE_TYPE, toFlowNode } from './flow-node';
 
 const node = createNode('prompt', { id: 'p-1', label: 'Prompt 1', position: { x: 4, y: 8 } });
+
+const MISSING_QUESTION: ValidationIssue = {
+  code: 'missing-input',
+  severity: 'error',
+  id: 'missing-input:p-1:question',
+  message: 'Input "question" is not connected',
+  nodeId: 'p-1',
+  portId: 'question',
+};
 
 describe('toFlowNode', () => {
   it('wraps a domain node for React Flow and names it after its label', () => {
@@ -11,7 +20,7 @@ describe('toFlowNode', () => {
       id: 'p-1',
       type: PIPELINE_NODE_TYPE,
       position: { x: 4, y: 8 },
-      data: { node },
+      data: { node, issues: EMPTY_ISSUES },
       ariaLabel: 'Prompt 1',
       selected: false,
       dragging: false,
@@ -31,5 +40,18 @@ describe('toFlowNode', () => {
       dragging: true,
       data: { node },
     });
+  });
+
+  it('carries the issues of a node and describes it by the list of them', () => {
+    expect(toFlowNode(node, { issues: [MISSING_QUESTION] })).toMatchObject({
+      data: { node, issues: [MISSING_QUESTION] },
+      domAttributes: { 'aria-describedby': 'node-description-p-1' },
+    });
+  });
+});
+
+describe('nodeDescriptionId', () => {
+  it('keeps an id usable in an id reference list', () => {
+    expect(nodeDescriptionId('Prompt 1')).toBe('node-description-Prompt%201');
   });
 });
