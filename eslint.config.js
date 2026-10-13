@@ -22,6 +22,8 @@ export default defineConfig(
     '**/test-results/',
     '**/.wrangler/',
     '.local/',
+    // Git worktrees of Claude Code agents: full checkouts that lint themselves.
+    '.claude/worktrees/',
   ]),
   {
     linterOptions: { reportUnusedDisableDirectives: 'error' },
