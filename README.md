@@ -9,19 +9,22 @@
 
 **[Live demo](https://pipeline-builder.marat-gabdrashitov17.workers.dev)** · **[Storybook](https://dr1m11.github.io/pipeline-builder/)** · **[Roadmap](docs/roadmap.md)** · **[Architecture decisions](docs/adr/README.md)**
 
-> 🚧 Work in progress. Stage A1 (foundation) is done; the MVP lands with stage A4. Progress is tracked in [milestones](https://github.com/dr1m11/pipeline-builder/milestones).
+> 🚧 Work in progress. Stages A1 (foundation) and A2 (canvas) are done; the MVP lands with stage A4. Progress is tracked in [milestones](https://github.com/dr1m11/pipeline-builder/milestones).
 
 ## Features
 
 Available now:
 
-- Editor shell with a React Flow canvas, light/dark themes without a flash, desktop-only gate
+- Canvas with 6 node types (Input, Prompt, LLM Call, Transform, Condition, Output) and typed ports: incompatible ports cannot be connected, and compatible ones light up while you connect
+- Node palette: drag a node onto the canvas or add it from the keyboard
+- Shift-drag a rectangle or Ctrl/⌘-click to select several nodes, then move or delete them together; minimap, zoom and pan
+- Keyboard and screen-reader support on the canvas: nodes, ports and edges have readable names, and ports connect with Enter
+- Light/dark themes without a flash, desktop-only gate
 - UI kit on Radix primitives and design tokens, documented in Storybook
 - Every pull request gets its own preview deployment
 
-Planned for the MVP (A2–A4):
+Planned for the MVP (A3–A4):
 
-- Drag-and-drop canvas with 6 node types and typed ports
 - Graph validation (cycles, type mismatches, unreachable nodes) shown on the canvas
 - Properties panel generated from node schemas (React Hook Form + Zod)
 - Undo / redo, copy / paste, keyboard shortcuts
@@ -39,7 +42,9 @@ React 19 · TypeScript (strict) · Vite · React Flow · Radix UI · Tailwind CS
 apps/web/              React SPA, Feature-Sliced Design (checked by Steiger)
   src/app/             composition root: error handling, device support, theme, global styles
   src/pages/           editor page
-  src/features/        user actions (toggle-theme, …)
+  src/widgets/         pipeline canvas
+  src/features/        user actions (add-node, toggle-theme)
+  src/entities/        pipeline store, node cards
   src/shared/          UI kit, helpers, config
 packages/core/         framework-free domain: graph model, validation, engine, undo, migrations
 docs/adr/              architecture decision records
@@ -47,6 +52,8 @@ docs/adr/              architecture decision records
 
 - **Feature-Sliced Design** with layer boundaries enforced by [Steiger](https://github.com/feature-sliced/steiger) in CI.
 - **Framework-free core.** Domain logic lives in `packages/core`, which cannot import React or browser APIs (lint rule plus a tsconfig without the DOM lib) and has its own 80% coverage gate. See [ADR 0001](docs/adr/0001-monorepo-with-fsd-app-and-framework-free-core.md).
+- **One source of truth for the graph.** The core `Pipeline` document lives in a zustand store and changes only through pure core operations; React Flow is a controlled view of it, and a drag reaches the document once, on drop. See [ADR 0006](docs/adr/0006-canvas-state-core-document-and-react-flow-view.md).
+- **Typed ports.** Every node kind declares its ports in core, and one rule decides which ports may connect. The canvas checks it while you connect and again before it adds an edge. See [ADR 0005](docs/adr/0005-node-catalogue-and-typed-ports.md).
 - **Design tokens** as CSS variables exposed through Tailwind utilities; components never use raw colours. See [ADR 0004](docs/adr/0004-ui-stack-radix-and-tailwind.md).
 - **Hosting** on Cloudflare Workers static assets, with the SSE proxy and collaboration backend planned on the same platform. See [ADR 0003](docs/adr/0003-hosting-on-cloudflare-workers.md).
 
