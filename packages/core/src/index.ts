@@ -1,4 +1,19 @@
 export { assertNever } from './assert-never';
+export { describeCommand } from './commands/describe-command';
+export {
+  type AddElementsCommand,
+  type AddNodeCommand,
+  type CommandError,
+  commandMergeKey,
+  type ConnectCommand,
+  executeCommand,
+  type MoveNodesCommand,
+  type PipelineCommand,
+  type RemoveElementsCommand,
+  type RenameNodeCommand,
+  type ReplacePipelineCommand,
+  type UpdateNodeDataCommand,
+} from './commands/pipeline-command';
 export { type Position } from './geometry';
 export {
   connect,
@@ -9,6 +24,7 @@ export {
   validateConnection,
 } from './graph/connections';
 export {
+  addElements,
   addNode,
   findNode,
   moveNodes,
@@ -18,6 +34,19 @@ export {
   renameNode,
   updateNodeData,
 } from './graph/nodes';
+export {
+  createHistoryEntry,
+  EMPTY_HISTORY,
+  type History,
+  HISTORY_LIMIT,
+  type HistoryEntry,
+  type HistoryStep,
+  MERGE_WINDOW_MS,
+  recordChange,
+  type RecordOptions,
+  redoChange,
+  undoChange,
+} from './history/history';
 export { type ConditionNodeData, type ConditionOperator } from './nodes/condition';
 export { type InputNodeData, type InputValueType } from './nodes/input';
 export { type LlmCallNodeData } from './nodes/llm-call';

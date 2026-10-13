@@ -11,7 +11,7 @@ import {
   type NodeOfKind,
   type PipelineNode,
 } from '../nodes/registry';
-import type { Pipeline } from '../pipeline';
+import type { Pipeline, PipelineEdge } from '../pipeline';
 import { err, ok, type Result } from '../result';
 
 /** Why node data could not be changed. */
@@ -50,6 +50,39 @@ export function addNode(
     position: params.position,
   });
   return { pipeline: { ...pipeline, nodes: [...pipeline.nodes, node] }, node };
+}
+
+/**
+ * Adds ready-made nodes and edges (pasted or duplicated), appended after the existing ones. Labels
+ * and edges are taken as they are. The caller supplies unique ids; reusing one, of the pipeline or
+ * within the new elements, is a programming error and throws. Existing nodes and edges keep their
+ * identity, and the same pipeline is returned when there is nothing to add.
+ */
+export function addElements(
+  pipeline: Pipeline,
+  elements: { nodes: readonly PipelineNode[]; edges: readonly PipelineEdge[] },
+): Pipeline {
+  if (elements.nodes.length === 0 && elements.edges.length === 0) return pipeline;
+  assertNewIds('Node', pipeline.nodes, elements.nodes);
+  assertNewIds('Edge', pipeline.edges, elements.edges);
+  return {
+    ...pipeline,
+    nodes: elements.nodes.length === 0 ? pipeline.nodes : [...pipeline.nodes, ...elements.nodes],
+    edges: elements.edges.length === 0 ? pipeline.edges : [...pipeline.edges, ...elements.edges],
+  };
+}
+
+/** Throws when an added element reuses the id of an existing element or of another added one. */
+function assertNewIds(
+  kind: 'Node' | 'Edge',
+  existing: readonly { readonly id: string }[],
+  added: readonly { readonly id: string }[],
+): void {
+  const used = new Set(existing.map((element) => element.id));
+  for (const { id } of added) {
+    if (used.has(id)) throw new Error(`${kind} id "${id}" is already used`);
+    used.add(id);
+  }
 }
 
 /**

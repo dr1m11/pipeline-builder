@@ -31,4 +31,4 @@ The core `Pipeline` is the single source of truth. It lives in a zustand store i
 - **React Flow owns the graph (`useNodesState`), synced to core** — two copies of the graph that can drift, and every core operation needs a round trip.
 - **React Flow nodes stored in the store** — ties the document to a rendering library; core could no longer own the graph.
 - **Commit every drag frame to the pipeline** — simpler, but validation, history and autosave would run on every pointer move.
-- **A module-level store** — less code, but stories and tests would share state, and A4 needs a store per loaded document.
+- **A module-level store** — less code, but stories and tests would share state, and A4 needs a store per loaded document (refined in [0009](./0009-undo-redo-commands-with-snapshot-history.md): one store per editor, whose document is replaced by an undoable command).

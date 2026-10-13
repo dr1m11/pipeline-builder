@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { createEmptyPipeline, type Pipeline } from '../pipeline';
+import { createNode } from '../nodes/registry';
+import { createEmptyPipeline, type Pipeline, type PipelineEdge } from '../pipeline';
 import type { Result } from '../result';
-import { addNode, findNode, moveNodes, removeElements, renameNode, updateNodeData } from './nodes';
+import {
+  addElements,
+  addNode,
+  findNode,
+  moveNodes,
+  removeElements,
+  renameNode,
+  updateNodeData,
+} from './nodes';
 
 const ORIGIN = { x: 0, y: 0 };
 
@@ -79,6 +88,80 @@ describe('addNode', () => {
     expect(() => addNode(samplePipeline(), { kind: 'input', id: 'llm', position: ORIGIN })).toThrow(
       'Node id "llm" is already used',
     );
+  });
+});
+
+describe('addElements', () => {
+  const prompt = createNode('prompt', { id: 'prompt-2', label: 'Prompt 1', position: ORIGIN });
+  const llm = createNode('llm-call', { id: 'llm-2', label: 'LLM Call 1', position: ORIGIN });
+  const edge: PipelineEdge = {
+    id: 'e3',
+    source: 'prompt-2',
+    sourcePort: 'prompt',
+    target: 'llm-2',
+    targetPort: 'prompt',
+  };
+
+  it('appends the nodes and edges as they are', () => {
+    const before = samplePipeline();
+    const after = addElements(before, { nodes: [prompt, llm], edges: [edge] });
+    expect(after.nodes).toEqual([...before.nodes, prompt, llm]);
+    expect(after.edges).toEqual([...before.edges, edge]);
+    expect(findNode(after, 'prompt-2')).toBe(prompt);
+  });
+
+  it('keeps the identity of the existing nodes and edges', () => {
+    const before = samplePipeline();
+    const after = addElements(before, { nodes: [prompt, llm], edges: [edge] });
+    before.nodes.forEach((node, index) => {
+      expect(after.nodes[index]).toBe(node);
+    });
+    before.edges.forEach((existing, index) => {
+      expect(after.edges[index]).toBe(existing);
+    });
+    expect(before.nodes).toHaveLength(4);
+  });
+
+  it('keeps the edge list when only nodes are added, and the node list when only edges are', () => {
+    const before = samplePipeline();
+    expect(addElements(before, { nodes: [prompt], edges: [] }).edges).toBe(before.edges);
+    const link = {
+      id: 'e3',
+      source: 'llm',
+      sourcePort: 'response',
+      target: 'out',
+      targetPort: 'value',
+    };
+    const after = addElements(before, { nodes: [], edges: [link] });
+    expect(after.nodes).toBe(before.nodes);
+    expect(after.edges).toEqual([...before.edges, link]);
+  });
+
+  it('returns the same pipeline when there is nothing to add', () => {
+    const pipeline = samplePipeline();
+    expect(addElements(pipeline, { nodes: [], edges: [] })).toBe(pipeline);
+  });
+
+  it('throws when a node id is already used', () => {
+    const output = createNode('output', { id: 'out', label: 'Output 2', position: ORIGIN });
+    expect(() => addElements(samplePipeline(), { nodes: [output], edges: [] })).toThrow(
+      'Node id "out" is already used',
+    );
+  });
+
+  it('throws when an edge id is already used', () => {
+    expect(() =>
+      addElements(samplePipeline(), { nodes: [prompt, llm], edges: [{ ...edge, id: 'e1' }] }),
+    ).toThrow('Edge id "e1" is already used');
+  });
+
+  it('throws when two added elements share an id', () => {
+    expect(() => addElements(samplePipeline(), { nodes: [prompt, prompt], edges: [] })).toThrow(
+      'Node id "prompt-2" is already used',
+    );
+    expect(() =>
+      addElements(samplePipeline(), { nodes: [prompt, llm], edges: [edge, edge] }),
+    ).toThrow('Edge id "e3" is already used');
   });
 });
 
