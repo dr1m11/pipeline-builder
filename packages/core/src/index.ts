@@ -67,3 +67,17 @@ export {
 export { type Err, err, type Ok, ok, type Result } from './result';
 export { SCHEMA_VERSION } from './schema-version';
 export { extractTemplateVariables } from './template';
+export {
+  type CycleIssue,
+  type DanglingEdgeIssue,
+  EMPTY_ISSUES,
+  type IncompatibleEdgeIssue,
+  type InvalidFieldIssue,
+  type IssueSeverity,
+  type MissingInputIssue,
+  type NoOutputIssue,
+  type UnreachableIssue,
+  type ValidationIssue,
+  type ValidationReport,
+} from './validation/issues';
+export { validatePipeline } from './validation/validate-pipeline';
