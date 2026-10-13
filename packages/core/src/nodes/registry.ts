@@ -53,7 +53,8 @@ export interface NodeOfKind<K extends NodeKind> {
 
 // `NodeOfKind` distributed over a union of kinds: `NodeOf<'input' | 'prompt'>` is
 // `NodeOfKind<'input'> | NodeOfKind<'prompt'>`, while for a single kind it stays `NodeOfKind<K>`.
-type NodeOf<K extends NodeKind> = { [P in K]: NodeOfKind<P> }[K];
+// Generic code returns it so that a call with the `NodeKind` union yields a `PipelineNode`.
+export type NodeOf<K extends NodeKind> = { [P in K]: NodeOfKind<P> }[K];
 
 /** A node of any kind; narrow it by `kind`. */
 export type PipelineNode = NodeOf<NodeKind>;
@@ -80,9 +81,21 @@ export function createNode<K extends NodeKind>(
   };
 }
 
-/** Current ports of a node, derived from its kind and data. */
+// Ports depend only on the data, and data objects are never mutated, so the ports derived from one
+// are cached with it. A Prompt would otherwise build new ports on every call.
+const portsByData = new WeakMap<NodeDataMap[NodeKind], NodePorts>();
+
+/**
+ * Current ports of a node, derived from its kind and data. The same data object always gives the
+ * same ports object, so callers can compare ports by identity.
+ */
 export function getNodePorts(node: PipelineNode): NodePorts {
-  return portsOf(node);
+  let ports = portsByData.get(node.data);
+  if (ports === undefined) {
+    ports = portsOf(node);
+    portsByData.set(node.data, ports);
+  }
+  return ports;
 }
 
 // Generic over the kind so the definition and the data stay correlated without a cast.

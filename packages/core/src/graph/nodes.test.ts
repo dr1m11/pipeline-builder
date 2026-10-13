@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { createEmptyPipeline, type Pipeline } from '../pipeline';
-import { addNode, findNode, moveNodes, removeElements } from './nodes';
+import type { Result } from '../result';
+import { addNode, findNode, moveNodes, removeElements, renameNode, updateNodeData } from './nodes';
 
 const ORIGIN = { x: 0, y: 0 };
 
@@ -131,5 +132,107 @@ describe('removeElements', () => {
     const pipeline = samplePipeline();
     expect(removeElements(pipeline, {})).toBe(pipeline);
     expect(removeElements(pipeline, { nodeIds: ['missing'], edgeIds: ['missing'] })).toBe(pipeline);
+  });
+});
+
+/** The pipeline of a successful edit; fails the test on an error. */
+function edited<E>(result: Result<Pipeline, E>): Pipeline {
+  if (!result.ok) throw new Error(`Unexpected error: ${String(result.error)}`);
+  return result.value;
+}
+
+describe('updateNodeData', () => {
+  it('changes the listed fields and keeps the rest of the data', () => {
+    const before = samplePipeline();
+    const after = edited(updateNodeData(before, 'llm', { temperature: 1.2, maxTokens: 64 }));
+    expect(findNode(after, 'llm')?.data).toEqual({
+      model: 'mock',
+      temperature: 1.2,
+      maxTokens: 64,
+    });
+    expect(findNode(before, 'llm')?.data).toEqual({
+      model: 'mock',
+      temperature: 0.7,
+      maxTokens: 512,
+    });
+  });
+
+  it('keeps the identity of other nodes and of the edges', () => {
+    const before = samplePipeline();
+    const after = edited(updateNodeData(before, 'llm', { model: 'large' }));
+    expect(findNode(after, 'in')).toBe(findNode(before, 'in'));
+    expect(findNode(after, 'out')).toBe(findNode(before, 'out'));
+    expect(after.edges).toBe(before.edges);
+    expect(after.nodes.map((node) => node.id)).toEqual(['in', 'prompt', 'llm', 'out']);
+  });
+
+  it('accepts values that only break a rule', () => {
+    const after = edited(updateNodeData(samplePipeline(), 'prompt', { template: '' }));
+    expect(findNode(after, 'prompt')?.data).toEqual({ template: '' });
+  });
+
+  it('keeps the edge of a template variable that was removed', () => {
+    const before = samplePipeline();
+    const after = edited(updateNodeData(before, 'prompt', { template: 'Tell a joke' }));
+    expect(after.edges).toBe(before.edges);
+    expect(after.edges.map((edge) => edge.targetPort)).toContain('question');
+  });
+
+  it('returns the same pipeline when no value changes', () => {
+    const pipeline = samplePipeline();
+    expect(edited(updateNodeData(pipeline, 'llm', {}))).toBe(pipeline);
+    expect(edited(updateNodeData(pipeline, 'llm', { temperature: 0.7, model: 'mock' }))).toBe(
+      pipeline,
+    );
+  });
+
+  it('rejects an unknown node', () => {
+    expect(updateNodeData(samplePipeline(), 'missing', { model: 'mock' })).toEqual({
+      ok: false,
+      error: 'unknown-node',
+    });
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['a field the kind does not have', { template: 'Hi' }],
+    ['a value of the wrong type', { temperature: 'hot' }],
+    ['a number that is not finite', { maxTokens: Number.NaN }],
+    ['a value outside an enum', { valueType: 'date' }],
+  ])('rejects %s', (_, changes) => {
+    const node = 'valueType' in changes ? 'in' : 'llm';
+    expect(updateNodeData(samplePipeline(), node, changes)).toEqual({
+      ok: false,
+      error: 'invalid-data',
+    });
+  });
+});
+
+describe('renameNode', () => {
+  it('trims the new label and keeps the other nodes and the edges', () => {
+    const before = samplePipeline();
+    const after = edited(renameNode(before, 'prompt', '  Ask the user  '));
+    expect(findNode(after, 'prompt')?.label).toBe('Ask the user');
+    expect(findNode(after, 'prompt')?.data).toBe(findNode(before, 'prompt')?.data);
+    expect(findNode(after, 'in')).toBe(findNode(before, 'in'));
+    expect(after.edges).toBe(before.edges);
+  });
+
+  it('returns the same pipeline when the label does not change', () => {
+    const pipeline = samplePipeline();
+    expect(edited(renameNode(pipeline, 'prompt', ' Prompt 1 '))).toBe(pipeline);
+  });
+
+  it('rejects an unknown node', () => {
+    expect(renameNode(samplePipeline(), 'missing', 'Name')).toEqual({
+      ok: false,
+      error: 'unknown-node',
+    });
+  });
+
+  it.each(['', '   ', 'a'.repeat(61)])('rejects the label %j', (label) => {
+    expect(renameNode(samplePipeline(), 'prompt', label)).toEqual({
+      ok: false,
+      error: 'invalid-label',
+    });
   });
 });

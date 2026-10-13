@@ -8,7 +8,16 @@ export {
   type ConnectResult,
   validateConnection,
 } from './graph/connections';
-export { addNode, findNode, moveNodes, removeElements } from './graph/nodes';
+export {
+  addNode,
+  findNode,
+  moveNodes,
+  type NodeDataError,
+  type NodeLabelError,
+  removeElements,
+  renameNode,
+  updateNodeData,
+} from './graph/nodes';
 export { type ConditionNodeData, type ConditionOperator } from './nodes/condition';
 export { type InputNodeData, type InputValueType } from './nodes/input';
 export { type LlmCallNodeData } from './nodes/llm-call';

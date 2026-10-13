@@ -91,6 +91,15 @@ describe('getNodePorts', () => {
     expect(getNodePorts(edited).inputs.map((port) => port.id)).toEqual(['a', 'b']);
   });
 
+  it('returns the same ports for the same data and new ones for new data', () => {
+    const prompt = createNode('prompt', { id: 'p', label: 'Prompt 1', position: ORIGIN });
+    const moved: PipelineNode = { ...prompt, position: { x: 5, y: 5 } };
+    const edited: PipelineNode = { ...prompt, data: { template: '{{a}}' } };
+    expect(getNodePorts(moved)).toBe(getNodePorts(prompt));
+    expect(getNodePorts(edited)).not.toBe(getNodePorts(prompt));
+    expect(getNodePorts(edited).inputs.map((port) => port.id)).toEqual(['a']);
+  });
+
   it('dispatches on the kind of a node typed as the union', () => {
     const nodes: PipelineNode[] = NODE_KINDS.map((kind) =>
       createNode(kind, { id: kind, label: kind, position: ORIGIN }),
