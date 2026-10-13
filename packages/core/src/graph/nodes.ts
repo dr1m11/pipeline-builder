@@ -1,6 +1,24 @@
 import type { Position } from '../geometry';
-import { createNode, nextNodeLabel, type NodeKind, type PipelineNode } from '../nodes/registry';
+import type { NodeDefinition } from '../nodes/node-definition';
+import { NODE_LABEL_SCHEMA } from '../nodes/node-label';
+import {
+  createNode,
+  nextNodeLabel,
+  NODE_DEFINITIONS,
+  type NodeDataMap,
+  type NodeKind,
+  type NodeOf,
+  type NodeOfKind,
+  type PipelineNode,
+} from '../nodes/registry';
 import type { Pipeline } from '../pipeline';
+import { err, ok, type Result } from '../result';
+
+/** Why node data could not be changed. */
+export type NodeDataError = 'unknown-node' | 'invalid-data';
+
+/** Why a node could not be renamed. */
+export type NodeLabelError = 'unknown-node' | 'invalid-label';
 
 // Lookups run on every pointer move while a connection is dragged, so index each pipeline once.
 const nodeIndexes = new WeakMap<Pipeline, ReadonlyMap<string, PipelineNode>>();
@@ -71,4 +89,75 @@ export function removeElements(
     return pipeline;
   }
   return { ...pipeline, nodes, edges };
+}
+
+/**
+ * Changes fields of a node's data. The changes are merged into the current data and must fit the
+ * kind's data schema: unknown fields and wrong types are `'invalid-data'`, while values that only
+ * break a rule (a blank template) are accepted and left to validation. Edges stay even when a port
+ * they use disappears. Other nodes and the edges keep their identity, and the same pipeline is
+ * returned when no value changes.
+ */
+export function updateNodeData(
+  pipeline: Pipeline,
+  nodeId: string,
+  changes: Readonly<Record<string, unknown>>,
+): Result<Pipeline, NodeDataError> {
+  const node = findNode(pipeline, nodeId);
+  if (node === undefined) return err('unknown-node');
+  const updated = withDataChanges(node, changes);
+  if (updated === 'invalid') return err('invalid-data');
+  return ok(updated === 'unchanged' ? pipeline : replaceNode(pipeline, node, updated));
+}
+
+/**
+ * Renames a node. The label is trimmed and must be neither blank nor too long (`NODE_LABEL_SCHEMA`).
+ * Other nodes and the edges keep their identity, and the same pipeline is returned when the label
+ * does not change.
+ */
+export function renameNode(
+  pipeline: Pipeline,
+  nodeId: string,
+  label: string,
+): Result<Pipeline, NodeLabelError> {
+  const node = findNode(pipeline, nodeId);
+  if (node === undefined) return err('unknown-node');
+  const parsed = NODE_LABEL_SCHEMA.safeParse(label);
+  if (!parsed.success) return err('invalid-label');
+  if (parsed.data === node.label) return ok(pipeline);
+  return ok(replaceNode(pipeline, node, { ...node, label: parsed.data }));
+}
+
+// Generic over the kind so the definition and the data stay correlated without a cast. Returns the
+// changed node, or why there is none: no value changes, or the result does not fit the kind's shape.
+function withDataChanges<K extends NodeKind>(
+  node: NodeOfKind<K>,
+  changes: Readonly<Record<string, unknown>>,
+): NodeOf<K> | 'unchanged' | 'invalid' {
+  const definition: NodeDefinition<NodeDataMap[K]> = NODE_DEFINITIONS[node.kind];
+  const { dataSchema } = definition;
+  // The schema would drop unknown fields silently; a change to a field the kind lacks is a mistake.
+  if (Object.keys(changes).some((name) => !Object.hasOwn(dataSchema.shape, name))) return 'invalid';
+  const parsed = dataSchema.safeParse({ ...node.data, ...changes });
+  if (!parsed.success) return 'invalid';
+  if (sameFields(parsed.data, node.data)) return 'unchanged';
+  const { id, kind, label, position } = node;
+  return { id, kind, label, position, data: parsed.data };
+}
+
+/** Whether two data objects have the same fields with identical values. */
+function sameFields(a: object, b: object): boolean {
+  const entries: [string, unknown][] = Object.entries(a);
+  const other = new Map<string, unknown>(Object.entries(b));
+  return (
+    entries.length === other.size &&
+    entries.every(([key, value]) => other.has(key) && Object.is(value, other.get(key)))
+  );
+}
+
+function replaceNode(pipeline: Pipeline, node: PipelineNode, next: PipelineNode): Pipeline {
+  return {
+    ...pipeline,
+    nodes: pipeline.nodes.map((candidate) => (candidate === node ? next : candidate)),
+  };
 }
