@@ -22,6 +22,8 @@ export default defineConfig(
     '**/test-results/',
     '**/.wrangler/',
     '.local/',
+    // Git worktrees of Claude Code agents: full checkouts that lint themselves.
+    '.claude/worktrees/',
   ]),
   {
     linterOptions: { reportUnusedDisableDirectives: 'error' },
@@ -87,6 +89,13 @@ export default defineConfig(
   {
     files: ['**/*.test.{ts,tsx}'],
     extends: [vitest.configs.recommended],
+    rules: {
+      // Type tests assert with `expectTypeOf`, which `tsc` checks (core schemas vs data types).
+      'vitest/expect-expect': [
+        'error',
+        { assertFunctionNames: ['expect', 'assert', 'expectTypeOf'] },
+      ],
+    },
   },
   {
     files: ['apps/web/e2e/**/*.ts'],

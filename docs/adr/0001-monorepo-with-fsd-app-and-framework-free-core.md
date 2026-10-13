@@ -18,7 +18,7 @@ In a single `src/` tree, keeping the core free of React relies on reviewers and 
 Use a pnpm workspace from day one:
 
 - `apps/web` — the SPA, organised with Feature-Sliced Design (`app → pages → widgets → features → entities → shared`). Steiger checks the structure in CI (`pnpm lint:fsd`).
-- `packages/core` — plain TypeScript, no runtime dependencies, consumed from source (`exports → ./src/index.ts`, no build step). React, DOM, `@xyflow/*`, zustand and Radix imports are banned by ESLint, and its tsconfig has no DOM lib, so browser APIs do not typecheck.
+- `packages/core` — plain TypeScript, no runtime dependencies (amended: each one needs an ADR; Zod is the first, see [0007](./0007-zod-schemas-for-node-data-in-core.md)), consumed from source (`exports → ./src/index.ts`, no build step). React, DOM, `@xyflow/*`, zustand and Radix imports are banned by ESLint, and its tsconfig has no DOM lib, so browser APIs do not typecheck.
 - `apps/proxy` — added in A5; it picks up the `apps/*` glob, extends `tsconfig.base.json` and imports `@pipeline-builder/core` the same way.
 
 Shared versions live in the pnpm `catalog`; shared compiler options live in `tsconfig.base.json`.

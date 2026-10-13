@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import * as z from 'zod';
 
-import { PROMPT_DEFINITION } from './prompt';
+import {
+  PROMPT_DATA_SCHEMA,
+  PROMPT_DEFINITION,
+  PROMPT_RULES_SCHEMA,
+  type PromptNodeData,
+} from './prompt';
 
 describe('PROMPT_DEFINITION', () => {
   it('starts with a template that has one variable', () => {
@@ -25,5 +31,30 @@ describe('PROMPT_DEFINITION', () => {
     expect(PROMPT_DEFINITION.getPorts({ template: '' }).outputs).toEqual([
       { id: 'prompt', label: 'prompt', type: 'text', required: false },
     ]);
+  });
+});
+
+describe('PROMPT_DATA_SCHEMA', () => {
+  it('describes exactly the Prompt data type', () => {
+    expectTypeOf<PromptNodeData>().toExtend<z.output<typeof PROMPT_DATA_SCHEMA>>();
+    expectTypeOf<z.output<typeof PROMPT_DATA_SCHEMA>>().toExtend<PromptNodeData>();
+    expectTypeOf<z.output<typeof PROMPT_RULES_SCHEMA>>().toExtend<PromptNodeData>();
+  });
+
+  it('accepts a blank template', () => {
+    expect(PROMPT_DATA_SCHEMA.safeParse({ template: '' }).success).toBe(true);
+  });
+});
+
+describe('PROMPT_RULES_SCHEMA', () => {
+  it('accepts the default template', () => {
+    expect(PROMPT_RULES_SCHEMA.safeParse(PROMPT_DEFINITION.createData()).success).toBe(true);
+  });
+
+  it('requires a template that is not blank', () => {
+    const result = PROMPT_RULES_SCHEMA.safeParse({ template: '  ' });
+    expect(result.success ? {} : z.flattenError(result.error).fieldErrors).toEqual({
+      template: ['Required'],
+    });
   });
 });

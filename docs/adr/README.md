@@ -11,3 +11,4 @@ Create a new one from [`template.md`](./template.md) with the next four-digit nu
 | [0004](./0004-ui-stack-radix-and-tailwind.md)                    | UI stack: Radix primitives, Tailwind CSS and CSS-variable tokens | Accepted |
 | [0005](./0005-node-catalogue-and-typed-ports.md)                 | Node catalogue and typed ports                                   | Accepted |
 | [0006](./0006-canvas-state-core-document-and-react-flow-view.md) | Canvas state: core document, React Flow view                     | Accepted |
+| [0007](./0007-zod-schemas-for-node-data-in-core.md)              | Zod schemas for node data in core                                | Accepted |

@@ -42,6 +42,14 @@ describe('NODE_DEFINITIONS', () => {
     }
     for (const port of outputs) expect(port.required).toBe(false);
   });
+
+  it.each(NODE_KINDS)('describes every field of "%s" in its schema', (kind) => {
+    const definition = NODE_DEFINITIONS[kind];
+    const data = definition.createData();
+    expect(definition.dataSchema.parse(data)).toEqual(data);
+    expect(Object.keys(definition.dataSchema.shape)).toEqual(Object.keys(data));
+    expect(Object.keys(definition.fields).sort()).toEqual(Object.keys(data).sort());
+  });
 });
 
 describe('isNodeKind', () => {

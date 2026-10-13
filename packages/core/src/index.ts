@@ -12,7 +12,19 @@ export { addNode, findNode, moveNodes, removeElements } from './graph/nodes';
 export { type ConditionNodeData, type ConditionOperator } from './nodes/condition';
 export { type InputNodeData, type InputValueType } from './nodes/input';
 export { type LlmCallNodeData } from './nodes/llm-call';
-export { type NodeDefinition } from './nodes/node-definition';
+export {
+  type FieldPresentation,
+  type NodeDataSchema,
+  type NodeDefinition,
+  type NodeFields,
+} from './nodes/node-definition';
+export {
+  type FieldControl,
+  type FieldOption,
+  getNodeFields,
+  type NodeField,
+} from './nodes/node-fields';
+export { NODE_LABEL_MAX_LENGTH, NODE_LABEL_SCHEMA } from './nodes/node-label';
 export { type OutputFormat, type OutputNodeData } from './nodes/output';
 export { type PromptNodeData } from './nodes/prompt';
 export {
