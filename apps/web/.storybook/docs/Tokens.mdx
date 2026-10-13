@@ -18,7 +18,7 @@ compare.
     ['border', 'bg-border', 'Dividers and outlines'],
     ['accent', 'bg-accent', 'Primary actions, selection'],
     ['danger', 'bg-danger', 'Destructive actions, errors'],
-    ['warning', 'bg-warning', 'Warnings'],
+    ['warning', 'bg-warning', 'Warnings; at least 3:1 against surfaces'],
     ['success', 'bg-success', 'Completed states'],
     ['focus', 'bg-focus', 'Focus rings'],
   ].map(([name, swatch, usage]) => (
@@ -66,6 +66,7 @@ canvas gives it an `edge-<type>` class, which `tokens.css` maps to React Flow's 
 | `border`  | `border-border`                                        |
 | `accent`  | `bg-accent`, `hover:bg-accent-hover`, `text-accent-fg` |
 | `danger`  | `bg-danger`, `text-danger-fg`                          |
+| `warning` | `bg-warning`, `text-warning-fg`                        |
 | `focus`   | `outline-focus`, `ring-focus`                          |
 | `port-*`  | `bg-port-text`, `border-port-json`, …                  |
 
