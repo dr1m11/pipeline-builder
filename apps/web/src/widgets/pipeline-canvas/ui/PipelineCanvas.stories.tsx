@@ -4,12 +4,14 @@ import {
   createEmptyPipeline,
   type NodeKind,
   type Pipeline,
+  updateNodeData,
 } from '@pipeline-builder/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, waitFor, within } from 'storybook/test';
 
 import { createPipelineStore, PipelineStoreProvider } from '@/entities/pipeline';
+import { Button } from '@/shared/ui/button';
 
 import { PipelineCanvas } from './PipelineCanvas';
 
@@ -50,6 +52,40 @@ function row(...kinds: NodeKind[]): Pipeline {
   );
 }
 
+/** `pipeline` with the data of node `nodeId` changed; fails the story on invalid data. */
+function withData(
+  pipeline: Pipeline,
+  nodeId: string,
+  changes: Readonly<Record<string, unknown>>,
+): Pipeline {
+  const result = updateNodeData(pipeline, nodeId, changes);
+  if (!result.ok) throw new Error(result.error);
+  return result.value;
+}
+
+/**
+ * Edges the editor no longer allows, as a pipeline can hold them after its nodes change: the
+ * Prompt lost `{{question}}`, and the Transform outputs JSON into a text input.
+ */
+function broken(): Pipeline {
+  let pipeline = row('input', 'prompt', 'transform', 'llm-call');
+  pipeline = withData(pipeline, 'input', { value: 'Why?' });
+  pipeline = withData(pipeline, 'prompt', { template: 'Tell a joke' });
+  return {
+    ...pipeline,
+    edges: [
+      { id: 'e1', source: 'input', sourcePort: 'value', target: 'prompt', targetPort: 'question' },
+      {
+        id: 'e2',
+        source: 'transform',
+        sourcePort: 'result',
+        target: 'llm-call',
+        targetPort: 'prompt',
+      },
+    ],
+  };
+}
+
 interface CanvasPreviewProps {
   pipeline: Pipeline;
 }
@@ -64,6 +100,49 @@ function CanvasPreview({ pipeline }: CanvasPreviewProps) {
       </div>
     </PipelineStoreProvider>
   );
+}
+
+/**
+ * The chain with a two-variable Prompt, and a button that swaps the variables: the edge into
+ * `question` must follow its handle to the second row although the node keeps its size.
+ */
+function TemplateSwapPreview() {
+  const store = useMemo(
+    () =>
+      createPipelineStore(withData(chain(), 'prompt', { template: '{{question}} {{context}}' })),
+    [],
+  );
+  const swap = () => {
+    const { pipeline } = store.getState();
+    // The properties panel edits data through store actions; here the story stands in for it.
+    store.setState({
+      pipeline: withData(pipeline, 'prompt', { template: '{{context}} {{question}}' }),
+    });
+  };
+  return (
+    <PipelineStoreProvider store={store}>
+      <Button onClick={swap}>Swap the variables</Button>
+      <div className="h-[30rem] w-[60rem]">
+        <PipelineCanvas />
+      </div>
+    </PipelineStoreProvider>
+  );
+}
+
+/** Where an SVG path ends, in viewport coordinates. */
+function pathEnd(path: SVGPathElement): Point {
+  const end = path.getPointAtLength(path.getTotalLength());
+  const matrix = path.getScreenCTM();
+  if (matrix === null) throw new Error('Edge path is not rendered');
+  const point = new DOMPoint(end.x, end.y).matrixTransform(matrix);
+  return { x: point.x, y: point.y };
+}
+
+/** The drawn path of the edge with id `edgeId`; the edge's own element has no geometry. */
+function edgePath(canvasElement: HTMLElement, edgeId: string): SVGPathElement {
+  const path = canvasElement.querySelector(`[data-id="${edgeId}"] path.react-flow__edge-path`);
+  if (!(path instanceof SVGPathElement)) throw new Error(`Edge ${edgeId} has no path`);
+  return path;
 }
 
 interface Point {
@@ -277,5 +356,52 @@ export const HighlightCompatiblePorts: Story = {
     await expect(
       canvas.queryByRole('group', { name: 'Transform 1 result to LLM Call 1 prompt' }),
     ).not.toBeInTheDocument();
+  },
+};
+
+export const BrokenPipeline: Story = {
+  args: { pipeline: broken() },
+  play: async ({ canvas, userEvent }) => {
+    const removed = await canvas.findByRole('group', {
+      name: 'Input 1 value to Prompt 1 question, error: Input "question" no longer exists',
+    });
+    const mismatch = canvas.getByRole('group', {
+      name: 'Transform 1 result to LLM Call 1 prompt, error: Connects json to text; convert it with a Transform node',
+    });
+    await expect(removed).toHaveClass('edge-invalid');
+    await expect(mismatch).toHaveClass('edge-invalid');
+    const prompt = canvas.getByRole('group', { name: 'Prompt 1' });
+    await expect(within(prompt).getByText('removed')).toBeVisible();
+
+    // A broken edge can still be selected and deleted, and its placeholder port goes with it.
+    removed.focus();
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard('{Delete}');
+
+    await waitFor(async () => {
+      await expect(
+        canvas.queryByRole('group', { name: /^Input 1 value to Prompt 1 question/ }),
+      ).not.toBeInTheDocument();
+    });
+    await expect(within(prompt).queryByText('removed')).not.toBeInTheDocument();
+  },
+};
+
+export const HandlesFollowTheTemplate: Story = {
+  render: () => <TemplateSwapPreview />,
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    const before = centerOf(await findPort(canvasElement, 'Prompt 1', 'Input question (text)'));
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Swap the variables' }));
+
+    await waitFor(async () => {
+      const port = await findPort(canvasElement, 'Prompt 1', 'Input question (text)');
+      const center = centerOf(port);
+      await expect(center.y - before.y).toBeGreaterThan(10);
+      // React Flow ends an edge at the middle of the handle's outer side.
+      const end = pathEnd(edgePath(canvasElement, 'e1'));
+      await expect(Math.abs(end.y - center.y)).toBeLessThan(2);
+      await expect(Math.abs(end.x - port.getBoundingClientRect().left)).toBeLessThan(2);
+    });
   },
 };

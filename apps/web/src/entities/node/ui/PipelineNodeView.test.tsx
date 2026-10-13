@@ -1,9 +1,13 @@
 import {
+  createEmptyPipeline,
+  EMPTY_ISSUES,
   NODE_DEFINITIONS,
   type NodeDataMap,
   type NodeKind,
   type NodeOfKind,
+  type PipelineEdge,
   type PipelineNode,
+  validatePipeline,
 } from '@pipeline-builder/core';
 import { render, screen, within } from '@testing-library/react';
 import { type NodeTypes, ReactFlow } from '@xyflow/react';
@@ -28,13 +32,26 @@ function node<K extends NodeKind>(
   };
 }
 
-function renderOnCanvas(nodes: PipelineNode[]) {
+/** Renders the nodes with the issues `validatePipeline` finds for them and the edges. */
+function renderOnCanvas(nodes: PipelineNode[], edges: PipelineEdge[] = []) {
+  const report = validatePipeline({
+    ...createEmptyPipeline({ id: 'draft', name: 'Test' }),
+    nodes,
+    edges,
+  });
+  const flowNodes = nodes.map((node) =>
+    toFlowNode(node, { issues: report.byNode.get(node.id) ?? EMPTY_ISSUES }),
+  );
   return render(
     <div style={{ width: 800, height: 600 }}>
-      <ReactFlow nodes={nodes.map((node) => toFlowNode(node))} nodeTypes={NODE_TYPES} />
+      <ReactFlow nodes={flowNodes} nodeTypes={NODE_TYPES} />
     </div>,
   );
 }
+
+// React Flow's own description of a node; a node with problems repeats it after them.
+const KEYBOARD_HINT =
+  'Press enter or space to select a node. You can then use the arrow keys to move the node around. Press delete to remove it and escape to cancel.';
 
 // Connecting ports is covered with the canvas that guards it (widgets/pipeline-canvas).
 describe('PipelineNodeView', () => {
@@ -79,5 +96,60 @@ describe('PipelineNodeView', () => {
     const renamed = screen.getByRole('group', { name: 'Input data' });
     expect(within(numbered).queryByText('Condition')).not.toBeInTheDocument();
     expect(within(renamed).getByText('Input')).toBeInTheDocument();
+  });
+
+  it('keeps the keyboard hint as the description of a node without problems', async () => {
+    renderOnCanvas([node('input', 'Input 1', { value: 'Why?' })]);
+
+    const card = await screen.findByRole('group', { name: 'Input 1' });
+    expect(card).toHaveAccessibleDescription(KEYBOARD_HINT);
+  });
+
+  it('counts the problems of a node and describes it by them, keeping its name', async () => {
+    renderOnCanvas([node('llm-call', 'LLM Call 1', { model: ' ' })]);
+
+    const card = await screen.findByRole('group', { name: 'LLM Call 1' });
+    expect(card).toHaveAccessibleDescription(
+      `2 problems: Input "prompt" is not connected. Model: Required. ${KEYBOARD_HINT}`,
+    );
+    expect(within(card).getByText('2')).toBeInTheDocument();
+  });
+
+  it('marks a required input that has no edge', async () => {
+    renderOnCanvas([node('prompt', 'Prompt 1')]);
+
+    const card = await screen.findByRole('group', { name: 'Prompt 1' });
+    expect(
+      within(card).getByRole('button', { name: 'Input question (text)' }),
+    ).toHaveAccessibleDescription('Not connected');
+    expect(
+      within(card).getByRole('button', { name: 'Output prompt (text)' }),
+    ).not.toHaveAccessibleDescription();
+  });
+
+  it('keeps a port that an edge still uses as a placeholder after the node lost it', async () => {
+    const input = node('input', 'Input 1', { value: 'Why?' });
+    const prompt = node('prompt', 'Prompt 1', { template: 'Tell a joke' });
+    renderOnCanvas(
+      [input, prompt],
+      [
+        {
+          id: 'e1',
+          source: input.id,
+          sourcePort: 'value',
+          target: prompt.id,
+          targetPort: 'question',
+        },
+      ],
+    );
+
+    const card = await screen.findByRole('group', { name: 'Prompt 1' });
+    expect(within(card).getByText('question')).toBeInTheDocument();
+    expect(within(card).getByText('removed')).toBeInTheDocument();
+    // A placeholder cannot be connected, so it is not offered as a port.
+    expect(within(card).queryByRole('button', { name: /question/ })).not.toBeInTheDocument();
+    expect(card).toHaveAccessibleDescription(
+      new RegExp('^1 problem: Input "question" no longer exists\\.'),
+    );
   });
 });
