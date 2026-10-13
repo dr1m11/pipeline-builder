@@ -1,20 +1,44 @@
-import { findNode, NODE_DEFINITIONS, type PipelineNode } from '@pipeline-builder/core';
-import { useId } from 'react';
+import {
+  EMPTY_ISSUES,
+  findNode,
+  NODE_DEFINITIONS,
+  type PipelineNode,
+} from '@pipeline-builder/core';
+import { useCallback, useId, useState } from 'react';
 
 import { NodeKindIcon } from '@/entities/node';
-import { usePipelineStore } from '@/entities/pipeline';
+import { usePipelineStore, useValidationReport } from '@/entities/pipeline';
 import { NodeProperties } from '@/features/edit-node-properties';
+import { type FieldRevealRequest, ProblemList } from '@/features/review-problems';
 
-/** The editor's right sidebar: the properties of the selected node. */
+import { ProblemsSection } from './ProblemsSection';
+
+/**
+ * The editor's right sidebar: the properties of the selected node and the problems of the
+ * pipeline. Picking a field problem selects its node and focuses the field in the form.
+ */
 export function Inspector() {
+  // A field to focus once its node's form is shown; cleared as soon as it has been focused, so
+  // selecting the node again later does not move focus.
+  const [fieldRequest, setFieldRequest] = useState<FieldRevealRequest | null>(null);
+  const clearFieldRequest = useCallback(() => {
+    setFieldRequest(null);
+  }, []);
+
   return (
     <div className="flex flex-col">
-      <PropertiesSection />
+      <PropertiesSection fieldRequest={fieldRequest} onFieldFocused={clearFieldRequest} />
+      <ProblemsSection onRevealField={setFieldRequest} />
     </div>
   );
 }
 
-function PropertiesSection() {
+interface PropertiesSectionProps {
+  fieldRequest: FieldRevealRequest | null;
+  onFieldFocused: () => void;
+}
+
+function PropertiesSection({ fieldRequest, onFieldFocused }: PropertiesSectionProps) {
   const headingId = useId();
   const selectedCount = usePipelineStore((state) => state.selectedNodeIds.size);
   // The node object is stable while it is unchanged, so this re-renders only when it changes.
@@ -38,7 +62,13 @@ function PropertiesSection() {
       ) : (
         <>
           <NodeHeader node={node} />
-          <NodeProperties key={node.id} node={node} />
+          <NodeGraphProblems node={node} />
+          <NodeProperties
+            key={node.id}
+            node={node}
+            focusField={fieldRequest?.nodeId === node.id ? fieldRequest.field : undefined}
+            onFieldFocused={onFieldFocused}
+          />
         </>
       )}
     </section>
@@ -58,4 +88,16 @@ function NodeHeader({ node }: { node: PipelineNode }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Problems of the node beyond its fields (unconnected inputs, broken edges, cycles, an unused
+ * result); the form shows field problems next to their fields.
+ */
+function NodeGraphProblems({ node }: { node: PipelineNode }) {
+  const issues = (useValidationReport().byNode.get(node.id) ?? EMPTY_ISSUES).filter(
+    (issue) => issue.code !== 'invalid-field',
+  );
+  if (issues.length === 0) return null;
+  return <ProblemList issues={issues} label={`Problems of ${node.label}`} />;
 }

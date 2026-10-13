@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { findNode, type NodeField, type PipelineNode } from '@pipeline-builder/core';
-import { type ChangeEvent, useEffect, useRef } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useRef } from 'react';
 import { useForm, type UseFormRegisterReturn } from 'react-hook-form';
 
 import { usePipelineStoreApi } from '@/entities/pipeline';
@@ -24,6 +24,8 @@ export interface NodeForm {
   readonly errorOf: (name: 'label' | `data.${string}`) => string | undefined;
   /** The `<form>`'s change handler: sends the changed control's value to the pipeline. */
   readonly onChange: (event: ChangeEvent<HTMLFormElement>) => void;
+  /** Moves focus to the control of data field `field`. */
+  readonly focusField: (field: string) => void;
 }
 
 /**
@@ -37,7 +39,7 @@ export interface NodeForm {
  */
 export function useNodeForm(node: PipelineNode): NodeForm {
   const store = usePipelineStoreApi();
-  const { register, getValues, getFieldState, formState, reset, trigger } = useForm<
+  const { register, getValues, getFieldState, formState, reset, trigger, setFocus } = useForm<
     NodeFormValues,
     unknown,
     NodeFormOutput
@@ -61,6 +63,14 @@ export function useNodeForm(node: PipelineNode): NodeForm {
     void trigger();
   }, [node, reset, trigger]);
 
+  // Stable, so an effect that focuses a field runs only when the requested field changes.
+  const focusField = useCallback(
+    (field: string) => {
+      setFocus(`data.${field}`);
+    },
+    [setFocus],
+  );
+
   return {
     label: register('label'),
     field: ({ name, control }) =>
@@ -83,6 +93,7 @@ export function useNodeForm(node: PipelineNode): NodeForm {
       // A change can make another field apply or break a rule (a Transform's operation and path).
       void trigger();
     },
+    focusField,
   };
 }
 

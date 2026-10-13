@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
@@ -57,6 +57,25 @@ describe('EditorPage', () => {
 
     expect(name).toHaveValue('Prompt');
     expect(await screen.findByRole('group', { name: 'Prompt' })).toBeInTheDocument();
+  });
+
+  it('takes the user from a problem to its node on the canvas', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+    await user.click(screen.getByRole('button', { name: 'Add LLM Call' }));
+    const problems = screen.getByRole('list', { name: 'Problems of the pipeline' });
+
+    await user.click(
+      within(problems).getByRole('button', {
+        name: 'Error: Prompt 1, Input "question" is not connected',
+      }),
+    );
+
+    const inspector = screen.getByRole('complementary', { name: 'Inspector' });
+    expect(within(inspector).getByRole('heading', { level: 3, name: 'Prompt 1' })).toBeVisible();
+    await waitFor(() => {
+      expect(screen.getByRole('group', { name: 'Prompt 1' })).toHaveFocus();
+    });
   });
 
   it('links to the source code in a new tab', () => {
