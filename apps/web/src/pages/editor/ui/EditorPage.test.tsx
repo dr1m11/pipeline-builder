@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { TooltipProvider } from '@/shared/ui/tooltip';
@@ -6,17 +7,31 @@ import { TooltipProvider } from '@/shared/ui/tooltip';
 import { EditorPage } from './EditorPage';
 
 function renderPage() {
-  return render(<EditorPage />, { wrapper: TooltipProvider });
+  render(<EditorPage />, { wrapper: TooltipProvider });
+  return { user: userEvent.setup() };
 }
 
 describe('EditorPage', () => {
-  it('shows the pipeline name and the canvas region', () => {
+  it('shows the pipeline name, the node palette and the canvas region', () => {
     renderPage();
 
     expect(
       screen.getByRole('heading', { level: 1, name: 'Untitled pipeline' }),
     ).toBeInTheDocument();
+    const palette = screen.getByRole('complementary', { name: 'Node palette' });
+    expect(within(palette).getByRole('button', { name: 'Add Input' })).toBeInTheDocument();
     expect(screen.getByRole('main', { name: 'Pipeline canvas' })).toBeInTheDocument();
+  });
+
+  it('hints how to start until the canvas has a node', async () => {
+    const { user } = renderPage();
+    const hint = 'Drag a node from the palette, or click one, to start your pipeline.';
+    expect(screen.getByText(hint)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Add Input' }));
+
+    expect(await screen.findByRole('group', { name: 'Input 1' })).toBeInTheDocument();
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
   });
 
   it('links to the source code in a new tab', () => {

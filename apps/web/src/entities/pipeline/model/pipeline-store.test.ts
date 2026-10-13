@@ -203,6 +203,19 @@ describe('createPipelineStore', () => {
     expect(store.getState().selectedEdgeIds.size).toBe(0);
   });
 
+  it('replaces the whole selection', () => {
+    const { store } = storeWithListener();
+    store.getState().updateSelection({
+      nodes: new Map([['input', true]]),
+      edges: new Map([['input-prompt', true]]),
+    });
+
+    store.getState().select({ nodeIds: ['prompt', 'missing'] });
+
+    expect([...store.getState().selectedNodeIds]).toEqual(['prompt']);
+    expect(store.getState().selectedEdgeIds.size).toBe(0);
+  });
+
   it('records node sizes', () => {
     const { store } = storeWithListener();
 
@@ -235,6 +248,7 @@ describe('createPipelineStore', () => {
     actions.connect({ source: 'llm', sourcePort: 'response', target: 'llm', targetPort: 'system' });
     actions.updateSelection({ nodes: new Map([['input', true]]), edges: new Map() });
     actions.updateSelection({ nodes: new Map([['prompt', false]]) });
+    actions.select({ nodeIds: ['input'] });
     actions.setMeasured(new Map([['input', { width: 240, height: 96 }]]));
 
     expect(listener).not.toHaveBeenCalled();
