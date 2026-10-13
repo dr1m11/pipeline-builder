@@ -8,7 +8,7 @@ import {
 } from '@pipeline-builder/core';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createPipelineStore, PipelineStoreProvider, usePipelineStore } from '@/entities/pipeline';
 
@@ -157,5 +157,28 @@ describe('NodeProperties', () => {
       expect(screen.getByRole('textbox', { name: 'Template' })).toHaveValue('Tell a joke');
     });
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Jokes');
+  });
+
+  it('focuses a requested field once and reports it', async () => {
+    const { pipeline } = addNode(createEmptyPipeline({ id: 'p', name: 'Test' }), {
+      kind: 'llm-call',
+      id: 'n',
+      position: { x: 0, y: 0 },
+    });
+    const node = findNode(pipeline, 'n');
+    if (node === undefined) throw new Error('The node is missing');
+    const onFieldFocused = vi.fn();
+
+    render(
+      <PipelineStoreProvider store={createPipelineStore(pipeline)}>
+        <NodeProperties node={node} focusField="temperature" onFieldFocused={onFieldFocused} />
+      </PipelineStoreProvider>,
+    );
+
+    // React Hook Form focuses on the next task.
+    await waitFor(() => {
+      expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toHaveFocus();
+    });
+    expect(onFieldFocused).toHaveBeenCalledOnce();
   });
 });

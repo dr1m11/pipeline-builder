@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, waitFor, within } from 'storybook/test';
 
 import { EditorPage } from './EditorPage';
 
@@ -82,6 +82,29 @@ export const RenameInInspector: Story = {
 
     // The canvas follows the form as it is typed.
     await expect(await canvas.findByRole('group', { name: 'Ask the model' })).toBeVisible();
+  },
+};
+
+export const JumpToProblem: Story = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('button', { name: 'Add Prompt' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Add LLM Call' }));
+    const problems = canvas.getByRole('list', { name: 'Problems of the pipeline' });
+
+    await userEvent.click(
+      within(problems).getByRole('button', {
+        name: 'Error: Prompt 1, Input "question" is not connected',
+      }),
+    );
+
+    // The node is selected, brought into view and focused for the keyboard.
+    const node = canvas.getByRole('group', { name: 'Prompt 1' });
+    await waitFor(() => expect(node).toHaveFocus());
+    await expect(node).toBeVisible();
+    const inspector = canvas.getByRole('complementary', { name: 'Inspector' });
+    await expect(
+      within(inspector).getByRole('heading', { level: 3, name: 'Prompt 1' }),
+    ).toBeVisible();
   },
 };
 
