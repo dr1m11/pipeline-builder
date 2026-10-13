@@ -4,6 +4,7 @@ import { CodeXml } from 'lucide-react';
 import { useState } from 'react';
 
 import { createPipelineStore, PipelineStoreProvider, usePipelineStore } from '@/entities/pipeline';
+import { NodePalette, useNodeDrop } from '@/features/add-node';
 import { ThemeToggle } from '@/features/toggle-theme';
 import { REPOSITORY_URL } from '@/shared/config';
 import { IconButton } from '@/shared/ui/icon-button';
@@ -16,7 +17,7 @@ export function EditorPage() {
 
   return (
     <PipelineStoreProvider store={store}>
-      {/* Wraps the page, not just the canvas: the node palette (#25) needs the viewport too. */}
+      {/* Wraps the page, not just the canvas: the palette adds nodes where the canvas is looking. */}
       <ReactFlowProvider>
         <div className="grid h-full grid-rows-[auto_1fr]">
           <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2">
@@ -30,9 +31,15 @@ export function EditorPage() {
               </IconButton>
             </div>
           </header>
-          <main className="min-h-0" aria-label="Pipeline canvas">
-            <PipelineCanvas />
-          </main>
+          <div className="grid min-h-0 grid-cols-[16rem_1fr]">
+            <aside
+              aria-label="Node palette"
+              className="overflow-y-auto border-r border-border bg-surface"
+            >
+              <NodePalette />
+            </aside>
+            <CanvasArea />
+          </div>
         </div>
       </ReactFlowProvider>
     </PipelineStoreProvider>
@@ -42,4 +49,26 @@ export function EditorPage() {
 function PipelineName() {
   const name = usePipelineStore((state) => state.pipeline.name);
   return <h1 className="text-base font-semibold">{name}</h1>;
+}
+
+/** The canvas, which also takes node kinds dropped from the palette. */
+function CanvasArea() {
+  const dropHandlers = useNodeDrop();
+  return (
+    <main className="relative min-h-0" aria-label="Pipeline canvas" {...dropHandlers}>
+      <PipelineCanvas />
+      <EmptyCanvasHint />
+    </main>
+  );
+}
+
+function EmptyCanvasHint() {
+  const isEmpty = usePipelineStore((state) => state.pipeline.nodes.length === 0);
+  if (!isEmpty) return null;
+  return (
+    // Lets pointer events through to the canvas, so a node can be dropped on the hint too.
+    <p className="pointer-events-none absolute inset-x-0 top-1/2 z-10 mx-auto w-fit -translate-y-1/2 rounded-lg border border-dashed border-border bg-surface px-4 py-3 text-sm text-fg-muted">
+      Drag a node from the palette, or click one, to start your pipeline.
+    </p>
+  );
 }

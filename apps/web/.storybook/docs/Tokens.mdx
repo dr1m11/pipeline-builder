@@ -36,7 +36,8 @@ compare.
 
 Each port type has a colour for its connection dot. Colour is never the only cue: ports also show
 their type as text, and `any` is drawn as a ring. Each colour keeps at least 3:1 contrast against
-`surface` and `surface-muted` in both themes.
+`surface` and `surface-muted` in both themes. An edge takes the colour of the port it leaves: the
+canvas gives it an `edge-<type>` class, which `tokens.css` maps to React Flow's edge stroke.
 
 <div className="not-prose grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
   {[

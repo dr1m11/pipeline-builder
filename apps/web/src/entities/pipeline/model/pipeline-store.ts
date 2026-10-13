@@ -25,7 +25,7 @@ export interface SelectionChanges {
   readonly edges?: ReadonlyMap<string, boolean>;
 }
 
-/** Ids of the nodes and edges to remove. */
+/** Ids of nodes and edges. */
 export interface ElementIds {
   readonly nodeIds?: readonly string[];
   readonly edgeIds?: readonly string[];
@@ -60,6 +60,8 @@ export interface PipelineActions {
   /** Connects an output to an input, replacing the edge that occupied the input. */
   connect: (candidate: ConnectionCandidate) => void;
   updateSelection: (changes: SelectionChanges) => void;
+  /** Makes these elements, and only these, the selection. */
+  select: (ids: ElementIds) => void;
   setMeasured: (sizes: ReadonlyMap<string, Size>) => void;
 }
 
@@ -158,6 +160,23 @@ export function createPipelineStore(
       set({ selectedNodeIds, selectedEdgeIds });
     },
 
+    select: ({ nodeIds = [], edgeIds = [] }) => {
+      const state = get();
+      const { pipeline: current } = state;
+      const selectedNodeIds = replaceSet(
+        state.selectedNodeIds,
+        nodeIds.filter((id) => findNode(current, id) !== undefined),
+      );
+      const selectedEdgeIds = replaceSet(
+        state.selectedEdgeIds,
+        edgeIds.filter((id) => current.edges.some((edge) => edge.id === id)),
+      );
+      if (selectedNodeIds === state.selectedNodeIds && selectedEdgeIds === state.selectedEdgeIds) {
+        return;
+      }
+      set({ selectedNodeIds, selectedEdgeIds });
+    },
+
     setMeasured: (sizes) => {
       const { pipeline: current, measured } = get();
       const changed = [...sizes].filter(([id, size]) => {
@@ -193,6 +212,13 @@ function applySelection(
     else next.delete(id);
   }
   return next;
+}
+
+/** A set of `ids`, or `current` itself when it holds exactly those ids. */
+function replaceSet(current: ReadonlySet<string>, ids: readonly string[]): ReadonlySet<string> {
+  const next = new Set(ids);
+  const same = next.size === current.size && [...next].every((id) => current.has(id));
+  return same ? current : next;
 }
 
 function samePosition(a: Position | undefined, b: Position): boolean {

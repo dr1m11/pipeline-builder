@@ -10,7 +10,7 @@ import {
   type OnDelete,
   ReactFlow,
 } from '@xyflow/react';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 
 import { PIPELINE_NODE_TYPE, type PipelineFlowNode, PipelineNodeView } from '@/entities/node';
 import { usePipelineStoreApi } from '@/entities/pipeline';
@@ -32,6 +32,9 @@ const DELETE_KEYS = ['Backspace', 'Delete'];
 export function PipelineCanvas() {
   const store = usePipelineStoreApi();
   const { nodes, edges } = useFlowElements();
+  // Fits a pipeline that opens with nodes. Decided once: on an empty canvas React Flow would keep
+  // the fit pending and spring it on the first node added, zooming in on it.
+  const [fitView] = useState(() => store.getState().pipeline.nodes.length > 0);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<PipelineFlowNode>[]) => {
@@ -85,7 +88,7 @@ export function PipelineCanvas() {
       isValidConnection={isValidConnection}
       onConnect={onConnect}
       deleteKeyCode={DELETE_KEYS}
-      fitView
+      fitView={fitView}
     >
       <Background />
       <Controls />
