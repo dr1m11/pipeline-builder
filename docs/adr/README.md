@@ -13,3 +13,4 @@ Create a new one from [`template.md`](./template.md) with the next four-digit nu
 | [0006](./0006-canvas-state-core-document-and-react-flow-view.md) | Canvas state: core document, React Flow view                     | Accepted |
 | [0007](./0007-zod-schemas-for-node-data-in-core.md)              | Zod schemas for node data in core                                | Accepted |
 | [0008](./0008-graph-validation.md)                               | Graph validation: issues, severities and what blocks a run       | Accepted |
+| [0009](./0009-undo-redo-commands-with-snapshot-history.md)       | Undo/redo: commands with snapshot history                        | Accepted |
