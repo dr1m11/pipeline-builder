@@ -81,16 +81,25 @@ function ToastCard({
   onClose,
 }: ToastCardProps) {
   const Icon = TONE_ICONS[tone];
+  const rootRef = useRef<HTMLLIElement>(null);
   return (
     <ToastPrimitive.Root
+      ref={rootRef}
       duration={duration}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      // Escape closes the toast and goes no further, so page-wide shortcuts (Escape clears the
-      // canvas selection) do not act on it too.
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') event.stopPropagation();
+      // Radix closes a toast on Escape, focused or not, without marking the key as handled, so
+      // page-wide shortcuts would act on it too (Escape clears the canvas selection). The toast
+      // closes here instead and marks it; focus that was in it stays in the notifications region,
+      // as Radix keeps it.
+      onEscapeKeyDown={(event) => {
+        event.preventDefault();
+        const toast = rootRef.current;
+        if (toast?.contains(document.activeElement) && toast.parentElement !== null) {
+          toast.parentElement.focus();
+        }
+        onClose();
       }}
       className="flex items-start gap-3 rounded-lg border border-border bg-surface p-3 text-fg shadow-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-[swipe=cancel]:translate-x-0 data-[swipe=cancel]:transition-[translate] data-[swipe=move]:translate-x-(--radix-toast-swipe-move-x) motion-safe:animate-toast-in"
     >

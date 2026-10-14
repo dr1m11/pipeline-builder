@@ -289,6 +289,24 @@ describe('EditorPage undo and redo', () => {
     expect(undoButton('Add Prompt')).toBeEnabled();
   });
 
+  it('keeps the node and the focus on its select when selection keys are pressed there', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Transform' }));
+    await user.click(screen.getByRole('button', { name: 'Add Output' }));
+    await user.click(screen.getByRole('button', { name: 'Add Transform' }));
+    const operation = screen.getByRole('combobox', { name: 'Operation' });
+    act(() => {
+      operation.focus();
+    });
+
+    await user.keyboard('{Escape}{Control>}a{/Control}{Control>}d{/Control}');
+
+    const inspector = screen.getByRole('complementary', { name: 'Inspector' });
+    expect(within(inspector).getByRole('heading', { level: 3, name: 'Transform 2' })).toBeVisible();
+    expect(operation).toHaveFocus();
+    expect(screen.queryByRole('group', { name: 'Transform 3' })).not.toBeInTheDocument();
+  });
+
   it('leaves Ctrl+Z in a text field to the field', async () => {
     const { user } = renderPage();
     await user.click(screen.getByRole('button', { name: 'Add Prompt' }));

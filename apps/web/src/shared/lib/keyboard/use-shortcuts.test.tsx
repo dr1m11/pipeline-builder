@@ -145,6 +145,32 @@ describe('useShortcuts', () => {
     expect(undo).not.toHaveBeenCalled();
   });
 
+  it('leaves a key to the browser and the next binding when a binding does not take it', async () => {
+    const user = userEvent.setup();
+    const skipped = vi.fn();
+    const taken = vi.fn();
+    function Bindings() {
+      useShortcuts([
+        { keys: ['Escape'], when: (event) => event.target === document.body, handler: skipped },
+        { keys: ['Mod+D'], when: () => false, handler: skipped },
+        { keys: ['Mod+D'], handler: taken },
+      ]);
+      return <button type="button">Run</button>;
+    }
+    render(<Bindings />);
+    const tracker = trackDefaultPrevented();
+
+    screen.getByRole('button', { name: 'Run' }).focus();
+    await user.keyboard('{Escape}');
+    expect(tracker.last()).toBe(false);
+    await user.keyboard('{Control>}d{/Control}');
+
+    expect(skipped).not.toHaveBeenCalled();
+    expect(taken).toHaveBeenCalledOnce();
+    expect(tracker.last()).toBe(true);
+    tracker.stop();
+  });
+
   it('stops listening once unmounted', async () => {
     const user = userEvent.setup();
     const { unmount } = render(<Editor />);

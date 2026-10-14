@@ -7,7 +7,7 @@ import {
   SCHEMA_VERSION,
   serializePipeline,
 } from '@pipeline-builder/core';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -54,6 +54,11 @@ function Editor() {
       <div className="nokey">
         <button type="button">Port</button>
       </div>
+      <select aria-label="Operation">
+        <option>Trim</option>
+        <option>Parse JSON</option>
+      </select>
+      <input type="checkbox" aria-label="Enabled" />
     </>
   );
 }
@@ -297,6 +302,21 @@ describe('useEditSelection clipboard', () => {
     expect(labels()).toEqual(['Input 1', 'Prompt 1', 'LLM Call 1', 'Input 2']);
   });
 
+  it('copies, but neither cuts nor pastes, while a select has the focus', async () => {
+    const { store, user } = renderEditor();
+    const { pipeline } = store.getState();
+    store.getState().select({ nodeIds: ['input'] });
+
+    await user.click(screen.getByRole('combobox', { name: 'Operation' }));
+    const copied = pressCopy('copy');
+    await user.paste(copied.text);
+
+    // Both would change the selection, and the Inspector would replace the form the select is in.
+    expect(copied.handled).toBe(true);
+    expect(pressCopy('cut').handled).toBe(false);
+    expect(store.getState().pipeline).toBe(pipeline);
+  });
+
   it('leaves the clipboard alone while a dialog has the focus', async () => {
     const { store, user } = renderEditor();
     store.getState().select({ nodeIds: ['input'] });
@@ -339,7 +359,13 @@ describe('useEditSelection clipboard', () => {
     expect(fire('beforecopy')).toBe(true);
     expect(fire('beforecut')).toBe(true);
 
+    await user.click(screen.getByRole('checkbox', { name: 'Enabled' }));
+    expect(fire('beforecopy')).toBe(true);
+    expect(fire('beforecut')).toBe(false);
+    expect(fire('beforepaste')).toBe(false);
+
     await user.click(screen.getByRole('textbox', { name: 'Notes' }));
+    expect(fire('beforecopy')).toBe(false);
     expect(fire('beforepaste')).toBe(false);
   });
 });
@@ -403,5 +429,29 @@ describe('useEditSelection shortcuts', () => {
     await user.keyboard('{Control>}a{/Control}');
 
     expect(store.getState().selectedNodeIds.size).toBe(0);
+  });
+
+  it.each([
+    ['a select', () => screen.getByRole('combobox', { name: 'Operation' })],
+    ['a checkbox', () => screen.getByRole('checkbox', { name: 'Enabled' })],
+  ])('keeps the selection when keys are pressed on %s', async (_control, control) => {
+    const { store, user } = renderEditor();
+    const { pipeline } = store.getState();
+    store.getState().select({ nodeIds: ['input'] });
+    const { selectedNodeIds } = store.getState();
+    const tracker = trackDefaultPrevented();
+
+    act(() => {
+      control().focus();
+    });
+    await user.keyboard('{Control>}d{/Control}');
+    expect(tracker.last()).toBe(false);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.keyboard('{Escape}');
+
+    expect(store.getState().pipeline).toBe(pipeline);
+    expect(store.getState().selectedNodeIds).toBe(selectedNodeIds);
+    expect(control()).toHaveFocus();
+    tracker.stop();
   });
 });

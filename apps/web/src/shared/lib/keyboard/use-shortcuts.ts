@@ -6,6 +6,11 @@ import { matchesShortcut, type ShortcutDescriptor, shortcutKeys } from './shortc
 /** A handler for the shortcuts in `keys` (and `appleKeys` on Apple platforms). */
 export interface ShortcutBinding extends Pick<ShortcutDescriptor, 'keys' | 'appleKeys'> {
   readonly handler: (event: KeyboardEvent) => void;
+  /**
+   * Whether the binding takes this key press; when it does not, the key is left to the browser
+   * (and to the bindings after it). Always by default.
+   */
+  readonly when?: (event: KeyboardEvent) => boolean;
 }
 
 // Inputs that edit text, and so have the browser's own undo; `HTMLInputElement.type` is 'text' for
@@ -38,8 +43,12 @@ export function useShortcuts(bindings: readonly ShortcutBinding[]): void {
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || ownsKeys(event.target)) return;
     const apple = isApplePlatform();
-    const binding = bindings.find((candidate) =>
-      shortcutKeys(candidate, apple).some((shortcut) => matchesShortcut(event, shortcut, apple)),
+    const binding = bindings.find(
+      (candidate) =>
+        shortcutKeys(candidate, apple).some((shortcut) =>
+          matchesShortcut(event, shortcut, apple),
+        ) &&
+        (candidate.when?.(event) ?? true),
     );
     if (binding === undefined) return;
     event.preventDefault();

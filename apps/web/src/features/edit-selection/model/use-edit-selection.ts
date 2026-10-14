@@ -24,11 +24,17 @@ import {
 } from '../lib/paste-cascade';
 import { pasteErrorToast } from '../lib/paste-error';
 
+type ClipboardAction = 'copy' | 'cut' | 'paste';
+
 const createId = () => crypto.randomUUID();
 
 // Safari runs Copy, Cut and Paste outside text only when the page cancels these events to say it
 // handles them. Chrome merely enables its menu items then, and Firefox does not fire them.
-const BEFORE_CLIPBOARD_EVENTS = ['beforecopy', 'beforecut', 'beforepaste'] as const;
+const BEFORE_CLIPBOARD_EVENTS = {
+  beforecopy: 'copy',
+  beforecut: 'cut',
+  beforepaste: 'paste',
+} as const satisfies Record<string, ClipboardAction>;
 
 /**
  * Copy, cut, paste, duplicate and select all for the pipeline of the surrounding editor.
@@ -40,6 +46,9 @@ const BEFORE_CLIPBOARD_EVENTS = ['beforecopy', 'beforecut', 'beforepaste'] as co
  * dialogs, menus and selected text keep the browser's clipboard. Ctrl/⌘+D duplicates the selected
  * nodes, Ctrl/⌘+A selects every node and edge, and Escape clears the selection. Every change of the
  * pipeline is one undo step.
+ *
+ * Keys that change the selection (cut, paste, duplicate, select all, Escape) are left alone on a
+ * select, a checkbox or a radio, where they would replace the Inspector's form under the focus.
  */
 export function useEditSelection(): void {
   const store = usePipelineStoreApi();
@@ -48,23 +57,30 @@ export function useEditSelection(): void {
   // as the clipboard gives it back, which may have other line ends (Windows).
   const cascadeRef = useRef<PasteCascade>(NO_PASTES);
 
+  /** Whether the editor takes this clipboard event for `action`, rather than the browser. */
+  const takes = (event: Event, action: ClipboardAction): boolean => {
+    if (!isForEditor(event)) return false;
+    if (action !== 'copy' && inFormControl(event)) return false;
+    return action === 'paste' || store.getState().selectedNodeIds.size > 0;
+  };
+
   const onCopyOrCut = useEffectEvent((event: ClipboardEvent) => {
     const { clipboardData } = event;
-    if (clipboardData === null || !isForEditor(event)) return;
+    const action = event.type === 'cut' ? 'cut' : 'copy';
+    if (clipboardData === null || !takes(event, action)) return;
     const { pipeline, selectedNodeIds, selectedEdgeIds, removeElements } = store.getState();
-    if (selectedNodeIds.size === 0) return;
     const text = serializePipeline(extractFragment(pipeline, selectedNodeIds));
     clipboardData.setData('text/plain', text);
     event.preventDefault();
     cascadeRef.current = startCascade(text);
-    if (event.type === 'cut') {
+    if (action === 'cut') {
       removeElements({ nodeIds: [...selectedNodeIds], edgeIds: [...selectedEdgeIds] }, 'cut');
     }
   });
 
   const onPaste = useEffectEvent((event: ClipboardEvent) => {
     const { clipboardData } = event;
-    if (clipboardData === null || !isForEditor(event)) return;
+    if (clipboardData === null || !takes(event, 'paste')) return;
     const parsed = parsePipelineFile(clipboardData.getData('text/plain'));
     if (!parsed.ok) {
       const notice = pasteErrorToast(parsed.error);
@@ -84,11 +100,8 @@ export function useEditSelection(): void {
     );
   });
 
-  const onBeforeClipboard = useEffectEvent((event: Event) => {
-    if (!isForEditor(event)) return;
-    if (event.type === 'beforepaste' || store.getState().selectedNodeIds.size > 0) {
-      event.preventDefault();
-    }
+  const onBeforeClipboard = useEffectEvent((event: Event, action: ClipboardAction) => {
+    if (takes(event, action)) event.preventDefault();
   });
 
   useEffect(() => {
@@ -98,26 +111,32 @@ export function useEditSelection(): void {
     const paste = (event: ClipboardEvent) => {
       onPaste(event);
     };
-    const beforeClipboard = (event: Event) => {
-      onBeforeClipboard(event);
-    };
+    const before = Object.entries(BEFORE_CLIPBOARD_EVENTS).map(
+      ([type, action]) =>
+        [
+          type,
+          (event: Event) => {
+            onBeforeClipboard(event, action);
+          },
+        ] as const,
+    );
     document.addEventListener('copy', copyOrCut);
     document.addEventListener('cut', copyOrCut);
     document.addEventListener('paste', paste);
-    for (const type of BEFORE_CLIPBOARD_EVENTS) document.addEventListener(type, beforeClipboard);
+    for (const [type, listener] of before) document.addEventListener(type, listener);
     return () => {
       document.removeEventListener('copy', copyOrCut);
       document.removeEventListener('cut', copyOrCut);
       document.removeEventListener('paste', paste);
-      for (const type of BEFORE_CLIPBOARD_EVENTS) {
-        document.removeEventListener(type, beforeClipboard);
-      }
+      for (const [type, listener] of before) document.removeEventListener(type, listener);
     };
   }, []);
 
+  const notOnFormControl = (event: KeyboardEvent) => !isFormControl(event.target);
   useShortcuts([
     {
       ...DUPLICATE_SHORTCUT,
+      when: notOnFormControl,
       handler: () => {
         const { pipeline, selectedNodeIds, insertElements } = store.getState();
         if (selectedNodeIds.size === 0) return;
@@ -128,12 +147,14 @@ export function useEditSelection(): void {
     },
     {
       ...SELECT_ALL_SHORTCUT,
+      when: notOnFormControl,
       handler: () => {
         store.getState().selectAll();
       },
     },
     {
       ...CLEAR_SELECTION_SHORTCUT,
+      when: notOnFormControl,
       handler: () => {
         store.getState().clearSelection();
       },
@@ -153,4 +174,18 @@ function isForEditor(event: Event): boolean {
   }
   const selection = document.getSelection();
   return selection === null || selection.isCollapsed;
+}
+
+/**
+ * Whether `target` is a form control that edits no text: a select, a checkbox, a radio (text
+ * fields keep all their keys anyway). Keys pressed there must not change the selection: the
+ * Inspector would show another form, and the focused control would go with the old one.
+ */
+function isFormControl(target: EventTarget | null): boolean {
+  return target instanceof HTMLSelectElement || target instanceof HTMLInputElement;
+}
+
+/** Whether a clipboard event comes from, or happens while the focus is on, such a form control. */
+function inFormControl(event: Event): boolean {
+  return isFormControl(event.target) || isFormControl(document.activeElement);
 }
