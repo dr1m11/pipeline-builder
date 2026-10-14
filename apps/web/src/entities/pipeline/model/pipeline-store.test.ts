@@ -4,9 +4,12 @@ import {
   type ConnectionCandidate,
   createEmptyPipeline,
   EMPTY_HISTORY,
+  extractFragment,
   findNode,
+  instantiateFragment,
   MERGE_WINDOW_MS,
   type Pipeline,
+  type PipelineElements,
 } from '@pipeline-builder/core';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -65,6 +68,15 @@ function storeWithClock(pipeline = chain()) {
 
 function labelsOf(entries: readonly { readonly label: string }[]): string[] {
   return entries.map((entry) => entry.label);
+}
+
+/** Copies of nodes of `pipeline` and the edges between them, with ids 'copy-1', 'copy-2'… */
+function copiesOf(pipeline: Pipeline, nodeIds: readonly string[]): PipelineElements {
+  let next = 0;
+  return instantiateFragment(extractFragment(pipeline, nodeIds), pipeline, {
+    createId: () => `copy-${String(++next)}`,
+    offset: { x: 32, y: 32 },
+  });
 }
 
 describe('createPipelineStore', () => {
@@ -600,5 +612,90 @@ describe('createPipelineStore replacing the document', () => {
     store.getState().redo();
 
     expect(store.getState().documentKey).toBe(1);
+  });
+});
+
+describe('createPipelineStore clipboard and selection', () => {
+  it('inserts copies as one step and makes them the selection', () => {
+    const { store } = storeWithClock();
+    const before = store.getState().pipeline;
+    store.getState().select({ nodeIds: ['llm'] });
+
+    store.getState().insertElements(copiesOf(before, ['input', 'prompt']), 'paste');
+
+    const state = store.getState();
+    expect(state.pipeline.nodes.map((node) => node.label)).toEqual([
+      'Input 1',
+      'Prompt 1',
+      'LLM Call 1',
+      'Input 2',
+      'Prompt 2',
+    ]);
+    expect(state.pipeline.edges.at(-1)).toMatchObject({ source: 'copy-1', target: 'copy-2' });
+    expect([...state.selectedNodeIds]).toEqual(['copy-1', 'copy-2']);
+    expect([...state.selectedEdgeIds]).toEqual(['copy-3']);
+    expect(labelsOf(state.history.past)).toEqual(['Paste 2 nodes']);
+
+    store.getState().undo();
+
+    expect(store.getState().pipeline).toBe(before);
+    expect(store.getState().selectedNodeIds.size).toBe(0);
+    expect(store.getState().selectedEdgeIds.size).toBe(0);
+  });
+
+  it('names a duplicate in the history', () => {
+    const { store } = storeWithClock();
+
+    store.getState().insertElements(copiesOf(store.getState().pipeline, ['llm']), 'duplicate');
+
+    expect(labelsOf(store.getState().history.past)).toEqual(['Duplicate 1 node']);
+    expect([...store.getState().selectedNodeIds]).toEqual(['copy-1']);
+  });
+
+  it('keeps the selection when there is nothing to insert', () => {
+    const { store, listener } = storeWithListener();
+    store.getState().select({ nodeIds: ['input'] });
+    listener.mockClear();
+
+    store.getState().insertElements({ nodes: [], edges: [] }, 'paste');
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(store.getState().history).toBe(EMPTY_HISTORY);
+  });
+
+  it('names a removal for the clipboard a cut', () => {
+    const { store } = storeWithClock();
+
+    store.getState().removeElements({ nodeIds: ['input', 'prompt'] }, 'cut');
+    store.getState().removeElements({ nodeIds: ['llm'] });
+
+    expect(store.getState().pipeline.nodes).toEqual([]);
+    expect(labelsOf(store.getState().history.past)).toEqual(['Cut 2 nodes', 'Delete LLM Call 1']);
+  });
+
+  it('selects every node and edge, and clears the selection', () => {
+    const { store } = storeWithListener();
+
+    store.getState().selectAll();
+
+    expect([...store.getState().selectedNodeIds]).toEqual(['input', 'prompt', 'llm']);
+    expect([...store.getState().selectedEdgeIds]).toEqual(['input-prompt', 'prompt-llm']);
+
+    store.getState().clearSelection();
+
+    expect(store.getState().selectedNodeIds.size).toBe(0);
+    expect(store.getState().selectedEdgeIds.size).toBe(0);
+  });
+
+  it('notifies nobody when the selection is already all or nothing', () => {
+    const { store, listener } = storeWithListener();
+
+    store.getState().clearSelection();
+    expect(listener).not.toHaveBeenCalled();
+
+    store.getState().selectAll();
+    listener.mockClear();
+    store.getState().selectAll();
+    expect(listener).not.toHaveBeenCalled();
   });
 });

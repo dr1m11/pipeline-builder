@@ -152,6 +152,57 @@ describe('Toast', () => {
     expect(onDelete).not.toHaveBeenCalled();
   });
 
+  describe('on Escape', () => {
+    /** Whether each Escape reached the page with its default action prevented. */
+    function trackEscape() {
+      const prevented: boolean[] = [];
+      const listener = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') prevented.push(event.defaultPrevented);
+      };
+      document.addEventListener('keydown', listener);
+      return {
+        prevented,
+        stop: () => {
+          document.removeEventListener('keydown', listener);
+        },
+      };
+    }
+
+    it('closes a focused toast and marks the key handled for page-wide shortcuts', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<Notify title="Copied 2 nodes" />);
+      await user.click(screen.getByRole('button', { name: 'Notify' }));
+      await user.keyboard('{F8}');
+      await user.tab();
+      expect(notifications().getByRole('listitem')).toHaveFocus();
+      const escape = trackEscape();
+
+      await user.keyboard('{Escape}');
+
+      expect(notifications().queryByRole('listitem')).not.toBeInTheDocument();
+      expect(escape.prevented).toEqual([true]);
+      const region = screen.getByRole('region', { name: 'Notifications (F8)' });
+      expect(region.contains(document.activeElement)).toBe(true);
+      escape.stop();
+    });
+
+    it('closes a toast that does not have the focus and marks the key handled', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<Notify title="Copied 2 nodes" />);
+      const notify = screen.getByRole('button', { name: 'Notify' });
+      await user.click(notify);
+      expect(notifications().getByRole('listitem')).toBeInTheDocument();
+      const escape = trackEscape();
+
+      await user.keyboard('{Escape}');
+
+      expect(notifications().queryByRole('listitem')).not.toBeInTheDocument();
+      expect(escape.prevented).toEqual([true]);
+      expect(notify).toHaveFocus();
+      escape.stop();
+    });
+  });
+
   it('fails outside a provider', () => {
     expect(() => renderHook(() => useToast())).toThrow('useToast is used outside ToastProvider');
   });

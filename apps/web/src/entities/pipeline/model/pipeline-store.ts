@@ -10,6 +10,7 @@ import {
   type NodeKind,
   type Pipeline,
   type PipelineCommand,
+  type PipelineElements,
   type PipelineNode,
   type Position,
   recordChange,
@@ -72,8 +73,16 @@ export interface PipelineActions {
   dragNodes: (positions: ReadonlyMap<string, Position>) => void;
   /** Moves nodes in the pipeline and ends their drag. */
   moveNodes: (positions: ReadonlyMap<string, Position>) => void;
-  /** Removes nodes and edges, with every edge of a removed node, and forgets their view state. */
-  removeElements: (ids: ElementIds) => void;
+  /**
+   * Removes nodes and edges, with every edge of a removed node, and forgets their view state. A
+   * `reason` of 'cut' only names the change in the history ("Cut 2 nodes" instead of "Delete").
+   */
+  removeElements: (ids: ElementIds, reason?: 'cut') => void;
+  /**
+   * Adds copies made for a paste or a duplicate, whose ids are not in use yet, as one change, and
+   * makes them the selection: the new nodes and the edges between them.
+   */
+  insertElements: (elements: PipelineElements, reason: 'paste' | 'duplicate') => void;
   /** Whether an output may be connected to an input; an occupied input may be. */
   canConnect: (candidate: ConnectionCandidate) => boolean;
   /** Connects an output to an input, replacing the edge that occupied the input. */
@@ -97,6 +106,13 @@ export interface PipelineActions {
   updateSelection: (changes: SelectionChanges) => void;
   /** Makes these elements, and only these, the selection. */
   select: (ids: ElementIds) => void;
+  /**
+   * Selects every node and every edge. Edges are included the way React Flow's selection box
+   * includes the edges of the nodes it takes, so the whole graph shows as selected.
+   */
+  selectAll: () => void;
+  /** Deselects every node and edge. */
+  clearSelection: () => void;
   setMeasured: (sizes: ReadonlyMap<string, Size>) => void;
 }
 
@@ -194,8 +210,18 @@ export function createPipelineStore(
         if (!moved && remaining !== dragPositions) set({ dragPositions: remaining });
       },
 
-      removeElements: (ids) => {
-        execute({ type: 'remove-elements', ...ids });
+      removeElements: (ids, reason) => {
+        execute({ type: 'remove-elements', ...ids, reason });
+      },
+
+      insertElements: ({ nodes, edges }, reason) => {
+        execute(
+          { type: 'add-elements', nodes, edges, reason },
+          {
+            selectedNodeIds: new Set(nodes.map((node) => node.id)),
+            selectedEdgeIds: new Set(edges.map((edge) => edge.id)),
+          },
+        );
       },
 
       canConnect: (candidate) => validateConnection(get().pipeline, candidate).ok,
@@ -265,6 +291,18 @@ export function createPipelineStore(
           return;
         }
         set({ selectedNodeIds, selectedEdgeIds });
+      },
+
+      selectAll: () => {
+        const { pipeline: current, select } = get();
+        select({
+          nodeIds: current.nodes.map((node) => node.id),
+          edgeIds: current.edges.map((edge) => edge.id),
+        });
+      },
+
+      clearSelection: () => {
+        get().select({});
       },
 
       setMeasured: (sizes) => {

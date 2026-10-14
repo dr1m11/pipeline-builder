@@ -268,6 +268,45 @@ describe('EditorPage undo and redo', () => {
     expect(undoButton('Add Transform')).toBeEnabled();
   });
 
+  it('undoes a connection with Ctrl+Z while its port still has focus', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Input' }));
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+    await activatePort(user, 'Input 1', 'Output value (text)');
+    await activatePort(user, 'Prompt 1', 'Input question (text)');
+    const edgeName = 'Input 1 value to Prompt 1 question';
+    expect(await screen.findByRole('group', { name: edgeName })).toBeInTheDocument();
+    const port = within(screen.getByRole('group', { name: 'Prompt 1' })).getByRole('button', {
+      name: 'Input question (text)',
+    });
+    expect(port).toHaveFocus();
+
+    await user.keyboard('{Control>}z{/Control}');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('group', { name: edgeName })).not.toBeInTheDocument();
+    });
+    expect(undoButton('Add Prompt')).toBeEnabled();
+  });
+
+  it('keeps the node and the focus on its select when selection keys are pressed there', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Transform' }));
+    await user.click(screen.getByRole('button', { name: 'Add Output' }));
+    await user.click(screen.getByRole('button', { name: 'Add Transform' }));
+    const operation = screen.getByRole('combobox', { name: 'Operation' });
+    act(() => {
+      operation.focus();
+    });
+
+    await user.keyboard('{Escape}{Control>}a{/Control}{Control>}d{/Control}');
+
+    const inspector = screen.getByRole('complementary', { name: 'Inspector' });
+    expect(within(inspector).getByRole('heading', { level: 3, name: 'Transform 2' })).toBeVisible();
+    expect(operation).toHaveFocus();
+    expect(screen.queryByRole('group', { name: 'Transform 3' })).not.toBeInTheDocument();
+  });
+
   it('leaves Ctrl+Z in a text field to the field', async () => {
     const { user } = renderPage();
     await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
