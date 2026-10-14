@@ -353,3 +353,49 @@ describe('EditorPage autosave', () => {
     );
   });
 });
+
+describe('EditorPage import', () => {
+  const imported = addNode(createEmptyPipeline({ id: 'ask', name: 'Ask a question' }), {
+    kind: 'input',
+    id: 'question',
+    position: { x: 0, y: 0 },
+  }).pipeline;
+
+  it('offers import and export in the File toolbar', () => {
+    renderPage();
+
+    const toolbar = screen.getByRole('toolbar', { name: 'File' });
+    expect(within(toolbar).getByRole('button', { name: 'Import pipeline' })).toBeEnabled();
+    expect(within(toolbar).getByRole('button', { name: 'Export pipeline' })).toBeEnabled();
+  });
+
+  it('opens an imported pipeline in place of the draft, and undoes it from the toast', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+    const file = new File([serializePipeline(imported)], 'ask.pipeline.json', {
+      type: 'application/json',
+    });
+
+    await user.upload(screen.getByLabelText('Pipeline file'), file);
+
+    expect(await screen.findByRole('group', { name: 'Input 1' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Prompt 1' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Ask a question' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Undo Import “Ask a question”' })).toBeEnabled();
+    const region = screen.getByRole('region', { name: 'Notifications (F8)' });
+    expect(within(region).getByRole('listitem')).toHaveTextContent('Imported “Ask a question”');
+    // The import ends after the file is read, outside any user event, and Radix lets pointer
+    // events into the toast region only in an effect after the toast renders.
+    await waitFor(() => {
+      expect(region).not.toHaveStyle({ pointerEvents: 'none' });
+    });
+
+    await user.click(within(region).getByRole('button', { name: 'Undo' }));
+
+    expect(await screen.findByRole('group', { name: 'Prompt 1' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Input 1' })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Untitled pipeline' }),
+    ).toBeInTheDocument();
+  });
+});

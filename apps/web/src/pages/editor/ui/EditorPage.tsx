@@ -3,6 +3,7 @@ import { CodeXml } from 'lucide-react';
 
 import { PipelineStoreProvider, usePipelineStore } from '@/entities/pipeline';
 import { NodePalette, useNodeDrop } from '@/features/add-node';
+import { ExportButton, ImportButton } from '@/features/import-export';
 import { ThemeToggle } from '@/features/toggle-theme';
 import { UndoRedoButtons, useUndoRedoShortcuts } from '@/features/undo-redo';
 import { REPOSITORY_URL } from '@/shared/config';
@@ -24,6 +25,11 @@ export function EditorPage() {
           <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2">
             <PipelineName />
             <div className="flex items-center gap-2">
+              <div role="toolbar" aria-label="File" className="flex items-center gap-1">
+                <ImportButton />
+                <ExportButton />
+              </div>
+              <span aria-hidden className="h-5 w-px bg-border" />
               <div role="toolbar" aria-label="Edit" className="flex items-center gap-1">
                 <UndoRedoButtons />
               </div>

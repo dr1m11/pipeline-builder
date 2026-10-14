@@ -129,6 +129,68 @@ function TemplateSwapPreview() {
   );
 }
 
+/** One Output node far from where the chain lies. */
+function farAway(): Pipeline {
+  return addNode(createEmptyPipeline({ id: 'far', name: 'Far away' }), {
+    kind: 'output',
+    id: 'far',
+    position: { x: 4000, y: 2400 },
+  }).pipeline;
+}
+
+/**
+ * The chain with buttons that replace the whole document, as an import or a new pipeline does, and
+ * that add a node and undo; the stories check where the view goes.
+ */
+function ReplaceDocumentPreview() {
+  const store = useMemo(() => createPipelineStore(chain()), []);
+  const actions = store.getState();
+  return (
+    <PipelineStoreProvider store={store}>
+      <div className="flex gap-2">
+        <Button
+          onClick={() => {
+            actions.replacePipeline(farAway(), 'import');
+          }}
+        >
+          Import a distant pipeline
+        </Button>
+        <Button
+          onClick={() => {
+            actions.replacePipeline(createEmptyPipeline({ id: 'new', name: 'New' }), 'new');
+          }}
+        >
+          New pipeline
+        </Button>
+        <Button
+          onClick={() => {
+            actions.addNode('input', { x: 0, y: 0 });
+          }}
+        >
+          Add an Input
+        </Button>
+        <Button
+          onClick={() => {
+            actions.undo();
+          }}
+        >
+          Undo
+        </Button>
+      </div>
+      <div className="h-[30rem] w-[60rem]">
+        <PipelineCanvas />
+      </div>
+    </PipelineStoreProvider>
+  );
+}
+
+/** Whether `inner` lies wholly inside `outer` on screen. */
+function isInside(inner: Element, outer: Element): boolean {
+  const a = inner.getBoundingClientRect();
+  const b = outer.getBoundingClientRect();
+  return a.left >= b.left && a.top >= b.top && a.right <= b.right && a.bottom <= b.bottom;
+}
+
 /** Where an SVG path ends, in viewport coordinates. */
 function pathEnd(path: SVGPathElement): Point {
   const end = path.getPointAtLength(path.getTotalLength());
@@ -402,6 +464,54 @@ export const HandlesFollowTheTemplate: Story = {
       const end = pathEnd(edgePath(canvasElement, 'e1'));
       await expect(Math.abs(end.y - center.y)).toBeLessThan(2);
       await expect(Math.abs(end.x - port.getBoundingClientRect().left)).toBeLessThan(2);
+    });
+  },
+};
+
+export const FitReplacedDocument: Story = {
+  render: () => <ReplaceDocumentPreview />,
+  play: async ({ canvas, userEvent }) => {
+    const flow = canvas.getByRole('application');
+    await expect(await canvas.findByRole('group', { name: 'Prompt 1' })).toBeVisible();
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Import a distant pipeline' }));
+
+    // The view moves to the new document, wherever its nodes are.
+    const output = await canvas.findByRole('group', { name: 'Output 1' });
+    await waitFor(() => expect(isInside(output, flow)).toBe(true));
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Undo' }));
+
+    // Undoing the replacement brings the old document back into view.
+    const prompt = await canvas.findByRole('group', { name: 'Prompt 1' });
+    await waitFor(() => expect(isInside(prompt, flow)).toBe(true));
+  },
+};
+
+export const NewPipelineResetsView: Story = {
+  render: () => <ReplaceDocumentPreview />,
+  play: async ({ canvas, userEvent }) => {
+    const flow = canvas.getByRole('application');
+    await expect(await canvas.findByRole('group', { name: 'Prompt 1' })).toBeVisible();
+
+    await userEvent.click(canvas.getByRole('button', { name: 'New pipeline' }));
+    await waitFor(() =>
+      expect(canvas.queryByRole('group', { name: 'Prompt 1' })).not.toBeInTheDocument(),
+    );
+    await userEvent.click(canvas.getByRole('button', { name: 'Add an Input' }));
+
+    // An empty document opens at the origin at full size, and the first node does not zoom in.
+    const input = await canvas.findByRole('group', { name: 'Input 1' });
+    await waitFor(async () => {
+      await expect(input.getBoundingClientRect().width).toBeCloseTo(240, 0);
+      await expect(input.getBoundingClientRect().left).toBeCloseTo(
+        flow.getBoundingClientRect().left,
+        0,
+      );
+      await expect(input.getBoundingClientRect().top).toBeCloseTo(
+        flow.getBoundingClientRect().top,
+        0,
+      );
     });
   },
 };

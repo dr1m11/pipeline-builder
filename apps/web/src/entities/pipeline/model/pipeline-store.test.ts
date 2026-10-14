@@ -77,6 +77,7 @@ describe('createPipelineStore', () => {
     expect(state.selectedEdgeIds.size).toBe(0);
     expect(state.measured.size).toBe(0);
     expect(state.dragPositions.size).toBe(0);
+    expect(state.documentKey).toBe(0);
   });
 
   it('adds a numbered node with a generated id and returns it', () => {
@@ -316,6 +317,7 @@ describe('createPipelineStore', () => {
     actions.setMeasured(new Map([['input', { width: 240, height: 96 }]]));
     actions.updateNodeData('prompt', { template: 'Answer the question: {{question}}' });
     actions.renameNode('prompt', 'Prompt 1');
+    actions.replacePipeline(actions.pipeline, 'import');
 
     expect(listener).not.toHaveBeenCalled();
   });
@@ -518,5 +520,85 @@ describe('createPipelineStore history', () => {
     store.getState().redo();
 
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('createPipelineStore replacing the document', () => {
+  const imported: Pipeline = addNode(createEmptyPipeline({ id: 'imported', name: 'Imported' }), {
+    kind: 'output',
+    id: 'output',
+    position: { x: 0, y: 0 },
+  }).pipeline;
+
+  it('replaces the pipeline in one undoable step', () => {
+    const { store } = storeWithClock();
+    const before = store.getState().pipeline;
+
+    store.getState().replacePipeline(imported, 'import');
+
+    expect(store.getState().pipeline).toBe(imported);
+    expect(store.getState().history.past).toMatchObject([
+      { label: 'Import “Imported”', before, after: imported, replacesDocument: true },
+    ]);
+    store.getState().undo();
+    expect(store.getState().pipeline).toBe(before);
+    store.getState().redo();
+    expect(store.getState().pipeline).toBe(imported);
+  });
+
+  it('labels the step by why the pipeline was replaced', () => {
+    const { store, advance } = storeWithClock();
+
+    store.getState().replacePipeline(imported, 'template');
+    advance(MERGE_WINDOW_MS + 1);
+    store.getState().replacePipeline(createEmptyPipeline({ id: 'new', name: 'New' }), 'new');
+
+    expect(labelsOf(store.getState().history.past)).toEqual([
+      'Load template “Imported”',
+      'New pipeline',
+    ]);
+  });
+
+  it('forgets the selection, sizes and drag positions of the replaced pipeline', () => {
+    const { store } = storeWithClock();
+    store.getState().select({ nodeIds: ['input'], edgeIds: ['input-prompt'] });
+    store.getState().setMeasured(new Map([['input', { width: 240, height: 96 }]]));
+    store.getState().dragNodes(new Map([['input', { x: 10, y: 10 }]]));
+
+    // The same id as a node of the replaced pipeline: it is another node all the same.
+    store
+      .getState()
+      .replacePipeline(
+        { ...imported, nodes: imported.nodes.map((node) => ({ ...node, id: 'input' })) },
+        'import',
+      );
+
+    const state = store.getState();
+    expect(state.selectedNodeIds.size).toBe(0);
+    expect(state.selectedEdgeIds.size).toBe(0);
+    expect(state.measured.size).toBe(0);
+    expect(state.dragPositions.size).toBe(0);
+  });
+
+  it('changes the document key with every replacement, its undo and its redo', () => {
+    const { store } = storeWithClock();
+
+    store.getState().replacePipeline(imported, 'import');
+    expect(store.getState().documentKey).toBe(1);
+    store.getState().undo();
+    expect(store.getState().documentKey).toBe(2);
+    store.getState().redo();
+    expect(store.getState().documentKey).toBe(3);
+  });
+
+  it('keeps the document key through other changes and their undo', () => {
+    const { store } = storeWithClock();
+    store.getState().replacePipeline(imported, 'import');
+
+    store.getState().renameNode('output', 'Answer');
+    store.getState().undo();
+    store.getState().redo();
+
+    expect(store.getState().documentKey).toBe(1);
   });
 });
