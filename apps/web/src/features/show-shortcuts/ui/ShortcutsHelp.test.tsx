@@ -25,30 +25,34 @@ const SHORTCUTS: readonly ShortcutDescriptor[] = [
   ...SHOW_SHORTCUTS_SHORTCUTS,
 ];
 
-/** The help as the editor wires it: the button, and `?` from anywhere but a text field. */
-function Help() {
+/**
+ * The help as the editor wires it: the button, and `?` from anywhere but a text field. A text field
+ * and, while `withNode`, another control stand for the rest of the page.
+ */
+function Help({ withNode }: { withNode: boolean }) {
   const [open, setOpen] = useState(false);
   useShowShortcutsShortcut(() => {
     setOpen(true);
   });
   return (
-    <>
+    <TooltipProvider delayDuration={0}>
       <input aria-label="Name" />
+      {withNode && <button type="button">Node</button>}
       <ShortcutsHelp shortcuts={SHORTCUTS} open={open} onOpenChange={setOpen} />
-    </>
+    </TooltipProvider>
   );
 }
 
 function renderHelp() {
-  render(
-    <TooltipProvider delayDuration={0}>
-      <Help />
-    </TooltipProvider>,
-  );
-  return { user: userEvent.setup() };
+  const { rerender } = render(<Help withNode />);
+  const removeNode = () => {
+    rerender(<Help withNode={false} />);
+  };
+  return { removeNode, user: userEvent.setup() };
 }
 
 const trigger = () => screen.getByRole('button', { name: 'Keyboard shortcuts' });
+const node = () => screen.getByRole('button', { name: 'Node' });
 
 describe('ShortcutsHelp', () => {
   afterEach(() => {
@@ -122,14 +126,42 @@ describe('ShortcutsHelp', () => {
     ).toBeInTheDocument();
   });
 
-  it('opens with ? and closes with Escape, back on its button', async () => {
+  it('opens with ? and, closed with Escape, gives focus back to where it was', async () => {
     const { user } = renderHelp();
+    await user.click(node());
 
     await user.keyboard('?');
-    const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
-    expect(dialog).toHaveFocus();
-
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toHaveFocus();
     await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(node()).toHaveFocus();
+  });
+
+  it('gives focus to its button when the button opened it', async () => {
+    const { user } = renderHelp();
+    // Opened with ? first, so what it remembered then is forgotten.
+    await user.click(node());
+    await user.keyboard('?{Escape}');
+
+    await user.click(trigger());
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger()).toHaveFocus();
+  });
+
+  it('gives focus to its button when ? opened it with nothing, or something now gone, in focus', async () => {
+    const { removeNode, user } = renderHelp();
+
+    await user.keyboard('?{Escape}');
+    expect(trigger()).toHaveFocus();
+
+    await user.click(node());
+    await user.keyboard('?');
+    removeNode();
+    await user.keyboard('{Escape}');
+
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(trigger()).toHaveFocus();
   });

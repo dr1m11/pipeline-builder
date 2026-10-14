@@ -28,7 +28,7 @@ const SHORTCUTS: readonly ShortcutDescriptor[] = [
     label: 'Delete the selection',
     group: 'Canvas',
   },
-  { id: 'move-nodes', keys: ['Arrow keys'], label: 'Move the selected nodes', group: 'Canvas' },
+  { id: 'move-nodes', keys: ['Arrow keys'], label: 'Move the focused selection', group: 'Canvas' },
   {
     id: 'select-area',
     keys: ['Shift+Drag'],
@@ -86,7 +86,10 @@ export const OpenWithButton: Story = {
   },
 };
 
-/** `?` opens the help; Escape closes it and puts focus on the button. */
+/**
+ * `?` opens the help; Escape closes it. Focus goes back to where it was, or to the button when
+ * nothing had focus, as here.
+ */
 export const OpenWithQuestionMark: Story = {
   play: async ({ canvas, userEvent }) => {
     await userEvent.keyboard('?');

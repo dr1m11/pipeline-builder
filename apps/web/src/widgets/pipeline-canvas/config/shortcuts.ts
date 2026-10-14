@@ -14,17 +14,18 @@ export const CANVAS_SHORTCUTS: readonly ShortcutDescriptor[] = [
     label: 'Delete the selection',
     group: 'Canvas',
   },
-  // A selected node with focus moves 5px per key press, and 20px with Shift.
+  // React Flow takes arrow keys only on a selected node with focus, or on the frame around a
+  // selection made by dragging; they move every selected node 5px per press, and 20px with Shift.
   {
     id: 'move-nodes',
     keys: ['Arrow keys'],
-    label: 'Move the selected nodes',
+    label: 'Move the focused selection',
     group: 'Canvas',
   },
   {
     id: 'move-nodes-further',
     keys: ['Shift+Arrow keys'],
-    label: 'Move the selected nodes further',
+    label: 'Move the focused selection further',
     group: 'Canvas',
   },
   {

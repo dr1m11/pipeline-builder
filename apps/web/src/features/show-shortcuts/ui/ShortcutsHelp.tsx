@@ -1,5 +1,5 @@
 import { Keyboard } from 'lucide-react';
-import { Fragment, useId, useState } from 'react';
+import { Fragment, useId, useRef, useState } from 'react';
 
 import {
   formatShortcut,
@@ -26,13 +26,24 @@ export interface ShortcutsHelpProps {
  * A button that opens the keyboard shortcuts help: a dialog that lists `shortcuts` by group, with
  * the keys of this platform (⌘ on Apple platforms, Ctrl elsewhere). While the dialog is open, the
  * keys pressed are its own: they neither run the editor's shortcuts nor reach the canvas behind.
+ *
+ * Closed, the help returns focus to where it came from: to the button when the button opened it,
+ * and to the element that had focus when `?` opened it (a node on the canvas, say), as long as that
+ * element is still on the page.
  */
 export function ShortcutsHelp({ shortcuts, open, onOpenChange }: ShortcutsHelpProps) {
   const [apple] = useState(() => isApplePlatform());
+  const openedByButtonRef = useRef(false);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
+      <DialogTrigger
+        asChild
+        onClick={() => {
+          openedByButtonRef.current = true;
+        }}
+      >
         <IconButton
           label="Keyboard shortcuts"
           shortcut={mainShortcut(SHOW_SHORTCUTS_SHORTCUT, apple)}
@@ -44,6 +55,25 @@ export function ShortcutsHelp({ shortcuts, open, onOpenChange }: ShortcutsHelpPr
         title="Keyboard shortcuts"
         description="Text fields keep their own shortcuts while you type in them."
         className="max-w-3xl"
+        // Runs before focus moves into the dialog, so the focused element is the one left behind.
+        onOpenAutoFocus={() => {
+          const focused = document.activeElement;
+          returnFocusRef.current =
+            !openedByButtonRef.current &&
+            focused instanceof HTMLElement &&
+            focused !== document.body
+              ? focused
+              : null;
+          openedByButtonRef.current = false;
+        }}
+        onCloseAutoFocus={(event) => {
+          const target = returnFocusRef.current;
+          returnFocusRef.current = null;
+          // With nothing to return to, Radix focuses the button.
+          if (!target?.isConnected) return;
+          event.preventDefault();
+          target.focus({ preventScroll: true });
+        }}
       >
         {/* Columns rather than a grid: a short group follows the one above it without a gap. */}
         <div className="columns-2 gap-8">

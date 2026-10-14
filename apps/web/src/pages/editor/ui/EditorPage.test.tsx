@@ -519,7 +519,8 @@ describe('EditorPage keyboard shortcuts help', () => {
     const canvas = within(dialog).getByRole('table', { name: 'Canvas' });
     for (const row of [
       'Delete the selection Delete or Backspace',
-      'Move the selected nodes Arrow keys',
+      'Move the focused selection Arrow keys',
+      'Move the focused selection further Shift Arrow keys',
       'Select the nodes in an area Shift Drag',
       'Add to or remove from the selection Ctrl Click',
     ]) {
@@ -540,6 +541,22 @@ describe('EditorPage keyboard shortcuts help', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(helpButton()).toHaveFocus();
+  });
+
+  it('gives focus back to the canvas node it was opened from with ?', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+    const node = await screen.findByRole('group', { name: 'Prompt 1' });
+    act(() => {
+      node.focus();
+    });
+
+    await user.keyboard('?');
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(node).toHaveFocus();
   });
 
   it('keeps the selected node when Delete or Backspace is pressed in the help', async () => {
