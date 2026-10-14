@@ -60,6 +60,22 @@ export {
   redoChange,
   undoChange,
 } from './history/history';
+export { type AbortSignalLike, type LlmClient } from './llm/llm-client';
+export {
+  LLM_ERROR_CODES,
+  LLM_ERROR_RESPONSE_SCHEMA,
+  LlmError,
+  type LlmErrorCode,
+  type LlmErrorResponse,
+} from './llm/llm-error';
+export { LLM_PROMPT_MAX_LENGTH, LLM_REQUEST_SCHEMA, type LlmRequest } from './llm/llm-request';
+export {
+  formatLlmStreamEvent,
+  type LlmStreamEvent,
+  parseLlmStreamEvent,
+} from './llm/llm-stream-event';
+export { mockCompletion, splitIntoTokens } from './llm/mock-completion';
+export { createSseParser, type SseEvent, type SseParser } from './llm/sse-parser';
 export { type ConditionNodeData, type ConditionOperator } from './nodes/condition';
 export { type InputNodeData, type InputValueType } from './nodes/input';
 export {
