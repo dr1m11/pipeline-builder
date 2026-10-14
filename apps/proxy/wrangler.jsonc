@@ -7,6 +7,9 @@
   "compatibility_date": "2026-10-12",
   "workers_dev": true,
   "preview_urls": true,
+  // Vite forwards /api/ here in dev. A fixed port makes `wrangler dev` fail when it is taken,
+  // instead of moving to the next free port where Vite would not find it.
+  "dev": { "port": 8787 },
   "assets": {
     "directory": "../web/dist",
     "binding": "ASSETS",
