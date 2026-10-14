@@ -33,17 +33,18 @@ export interface FlowNodeView {
 }
 
 /**
- * Id of the element that describes a node with problems. Node ids may contain spaces, which would
- * split an `aria-describedby` reference, so the id is encoded.
+ * Id of the element that describes a node: its problems, its run status and the keyboard hint.
+ * Node ids may contain spaces, which would split an `aria-describedby` reference, so the id is
+ * encoded.
  */
 export function nodeDescriptionId(nodeId: string): string {
   return `node-description-${encodeURIComponent(nodeId)}`;
 }
 
 /**
- * Wraps a domain node for React Flow; its label becomes the accessible name. A node with problems
- * is described by its card's list of them instead of React Flow's keyboard hint, which the card
- * repeats.
+ * Wraps a domain node for React Flow; its label becomes the accessible name. The node is described
+ * by its card (its problems and its run status) instead of React Flow's keyboard hint, which the
+ * card repeats.
  */
 export function toFlowNode(node: PipelineNode, view: FlowNodeView = {}): PipelineFlowNode {
   const issues = view.issues ?? EMPTY_ISSUES;
@@ -53,9 +54,7 @@ export function toFlowNode(node: PipelineNode, view: FlowNodeView = {}): Pipelin
     position: view.dragPosition ?? node.position,
     data: { node, issues },
     ariaLabel: node.label,
-    ...(issues.length > 0 && {
-      domAttributes: { 'aria-describedby': nodeDescriptionId(node.id) },
-    }),
+    domAttributes: { 'aria-describedby': nodeDescriptionId(node.id) },
     selected: view.selected ?? false,
     dragging: view.dragPosition !== undefined,
     measured: view.measured,

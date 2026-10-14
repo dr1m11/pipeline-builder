@@ -4,6 +4,7 @@ import {
   createEmptyPipeline,
   type NodeKind,
   type Pipeline,
+  type RunEvent,
 } from '@pipeline-builder/core';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -11,6 +12,7 @@ import { ReactFlowProvider, useViewport } from '@xyflow/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createPipelineStore, PipelineStoreProvider } from '@/entities/pipeline';
+import { createRunStore, type RunStore, RunStoreProvider } from '@/entities/run';
 
 import { PipelineCanvas } from './PipelineCanvas';
 
@@ -50,14 +52,17 @@ function row(...kinds: NodeKind[]): Pipeline {
 
 function renderCanvas(pipeline = chain()) {
   const store = createPipelineStore(pipeline, { createId: () => 'new' });
+  const runStore = createRunStore();
   render(
     <PipelineStoreProvider store={store}>
-      <div style={{ width: 1200, height: 600 }}>
-        <PipelineCanvas />
-      </div>
+      <RunStoreProvider store={runStore}>
+        <div style={{ width: 1200, height: 600 }}>
+          <PipelineCanvas />
+        </div>
+      </RunStoreProvider>
     </PipelineStoreProvider>,
   );
-  return { store, user: userEvent.setup() };
+  return { store, runStore, user: userEvent.setup() };
 }
 
 async function selectWithKeyboard(user: ReturnType<typeof userEvent.setup>, name: string) {
@@ -187,10 +192,12 @@ describe('PipelineCanvas', () => {
   it('ends a text selection elsewhere on the page when it is pressed', async () => {
     render(
       <PipelineStoreProvider store={createPipelineStore(chain())}>
-        <p>Text selected before</p>
-        <div style={{ width: 1200, height: 600 }}>
-          <PipelineCanvas />
-        </div>
+        <RunStoreProvider store={createRunStore()}>
+          <p>Text selected before</p>
+          <div style={{ width: 1200, height: 600 }}>
+            <PipelineCanvas />
+          </div>
+        </RunStoreProvider>
       </PipelineStoreProvider>,
     );
     const node = await screen.findByRole('group', { name: 'Input 1' });
@@ -201,6 +208,119 @@ describe('PipelineCanvas', () => {
     fireEvent.pointerDown(node);
 
     expect(document.getSelection()?.isCollapsed).toBe(true);
+  });
+});
+
+describe('PipelineCanvas runs', () => {
+  /** Starts a run in `runStore` and applies `events` to it, as the runner does once per frame. */
+  function report(runStore: RunStore, events: readonly RunEvent[]) {
+    act(() => {
+      if (runStore.getState().status !== 'running') runStore.getState().start();
+      runStore.getState().applyEvents(events);
+    });
+  }
+
+  const QUEUED: readonly RunEvent[] = ['input', 'prompt', 'llm'].map((nodeId) => ({
+    type: 'node-status',
+    nodeId,
+    status: 'queued',
+  }));
+
+  it('shows the status of each node, in words and in its description', async () => {
+    const { runStore } = renderCanvas();
+    const llm = await screen.findByRole('group', { name: 'LLM Call 1' });
+    expect(llm).not.toHaveAccessibleDescription(/Run status/);
+
+    report(runStore, [
+      ...QUEUED,
+      { type: 'node-output', nodeId: 'input', outputs: { value: 'Why?' } },
+      { type: 'node-status', nodeId: 'input', status: 'done' },
+      { type: 'node-status', nodeId: 'prompt', status: 'running' },
+    ]);
+
+    expect(screen.getByRole('group', { name: 'Input 1' })).toHaveAccessibleDescription(
+      /Run status: done\. Press enter or space to select a node\./,
+    );
+    expect(within(screen.getByRole('group', { name: 'Input 1' })).getByText('Done')).toBeVisible();
+    expect(
+      within(screen.getByRole('group', { name: 'Prompt 1' })).getByText('Running'),
+    ).toBeVisible();
+    expect(llm).toHaveAccessibleDescription(/^Run status: queued\./);
+  });
+
+  it('describes the problems of a node before its run status', async () => {
+    const { runStore } = renderCanvas(row('prompt'));
+    const prompt = await screen.findByRole('group', { name: 'Prompt 1' });
+
+    report(runStore, [{ type: 'node-status', nodeId: 'prompt', status: 'cancelled' }]);
+
+    expect(prompt).toHaveAccessibleDescription(
+      /^1 problem: Input "question" is not connected\. Run status: cancelled\. Press enter/,
+    );
+  });
+
+  it('streams the response into its LLM Call, and says why a node failed', async () => {
+    const { runStore } = renderCanvas();
+    await screen.findByRole('group', { name: 'LLM Call 1' });
+
+    report(runStore, [
+      ...QUEUED,
+      { type: 'node-status', nodeId: 'llm', status: 'running' },
+      { type: 'node-delta', nodeId: 'llm', text: 'The sky\n' },
+      { type: 'node-delta', nodeId: 'llm', text: 'is blue.' },
+    ]);
+
+    const llm = screen.getByRole('group', { name: 'LLM Call 1' });
+    expect(within(llm).getByRole('textbox', { name: 'LLM Call 1 response' }).textContent).toBe(
+      'The sky\nis blue.',
+    );
+
+    report(runStore, [
+      {
+        type: 'node-status',
+        nodeId: 'prompt',
+        status: 'error',
+        error: { code: 'missing-input', message: 'Input "question" has no value' },
+      },
+    ]);
+
+    const prompt = screen.getByRole('group', { name: 'Prompt 1' });
+    expect(within(prompt).getByText('Input "question" has no value')).toBeVisible();
+    expect(prompt).toHaveAccessibleDescription(
+      /^Run status: failed\. Input "question" has no value\./,
+    );
+  });
+
+  it('marks the edges that carried data, and the ones it is flowing along', async () => {
+    const { runStore } = renderCanvas();
+    const edgePath = async (name: string) => {
+      const edge = await screen.findByRole('group', { name });
+      // The mark is drawn only: the edge's path has no accessible handle of its own.
+      const path = edge.querySelector('.react-flow__edge-path');
+      if (path === null) throw new Error(`The edge "${name}" has no path`);
+      return path;
+    };
+    const inputToPrompt = await edgePath('Input 1 value to Prompt 1 question');
+    const promptToLlm = await edgePath('Prompt 1 prompt to LLM Call 1 prompt');
+
+    report(runStore, [
+      ...QUEUED,
+      { type: 'node-output', nodeId: 'input', outputs: { value: 'Why?' } },
+      { type: 'node-status', nodeId: 'input', status: 'done' },
+      { type: 'node-output', nodeId: 'prompt', outputs: { prompt: 'Answer: Why?' } },
+      { type: 'node-status', nodeId: 'prompt', status: 'done' },
+      { type: 'node-status', nodeId: 'llm', status: 'running' },
+    ]);
+
+    expect(inputToPrompt).toHaveClass('edge-carried');
+    expect(promptToLlm).toHaveClass('edge-flowing');
+
+    act(() => {
+      runStore.getState().reset();
+    });
+
+    expect(inputToPrompt).not.toHaveClass('edge-carried');
+    expect(promptToLlm).not.toHaveClass('edge-flowing');
   });
 });
 
@@ -217,12 +337,14 @@ function renderCanvasWithViewport(pipeline: Pipeline) {
   const store = createPipelineStore(pipeline, { createId: () => 'new' });
   render(
     <PipelineStoreProvider store={store}>
-      <ReactFlowProvider>
-        <div style={{ width: 1200, height: 600 }}>
-          <PipelineCanvas />
-        </div>
-        <ViewportStatus />
-      </ReactFlowProvider>
+      <RunStoreProvider store={createRunStore()}>
+        <ReactFlowProvider>
+          <div style={{ width: 1200, height: 600 }}>
+            <PipelineCanvas />
+          </div>
+          <ViewportStatus />
+        </ReactFlowProvider>
+      </RunStoreProvider>
     </PipelineStoreProvider>,
   );
   const viewport = () => {
@@ -335,13 +457,15 @@ describe('PipelineCanvas focus after a replaced document', () => {
     const store = createPipelineStore(chain());
     render(
       <PipelineStoreProvider store={store}>
-        <ReactFlowProvider>
-          <button type="button">Import pipeline</button>
-          <div style={{ width: 1200, height: 600 }}>
-            <PipelineCanvas />
-          </div>
-          <ViewportStatus />
-        </ReactFlowProvider>
+        <RunStoreProvider store={createRunStore()}>
+          <ReactFlowProvider>
+            <button type="button">Import pipeline</button>
+            <div style={{ width: 1200, height: 600 }}>
+              <PipelineCanvas />
+            </div>
+            <ViewportStatus />
+          </ReactFlowProvider>
+        </RunStoreProvider>
       </PipelineStoreProvider>,
     );
     await screen.findByRole('group', { name: 'Prompt 1' });

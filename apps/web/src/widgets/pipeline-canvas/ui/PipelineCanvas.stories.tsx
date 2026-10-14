@@ -3,7 +3,11 @@ import {
   connect,
   createEmptyPipeline,
   type NodeKind,
+  type NodeValues,
   type Pipeline,
+  PIPELINE_TEMPLATES,
+  type PipelineTemplateId,
+  type RunEvent,
   updateNodeData,
 } from '@pipeline-builder/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -11,6 +15,7 @@ import { useMemo } from 'react';
 import { expect, waitFor, within } from 'storybook/test';
 
 import { createPipelineStore, PipelineStoreProvider } from '@/entities/pipeline';
+import { createRunStore, RunStoreProvider } from '@/entities/run';
 import { Button } from '@/shared/ui/button';
 
 import { PipelineCanvas } from './PipelineCanvas';
@@ -88,16 +93,28 @@ function broken(): Pipeline {
 
 interface CanvasPreviewProps {
   pipeline: Pipeline;
+  /** Events of a run in progress, or of a run that `run-finished` ended; none by default. */
+  run?: readonly RunEvent[];
 }
 
-/** The canvas over its own store, at a fixed size: React Flow needs a sized parent. */
-function CanvasPreview({ pipeline }: CanvasPreviewProps) {
+/** The canvas over its own stores, at a fixed size: React Flow needs a sized parent. */
+function CanvasPreview({ pipeline, run = [] }: CanvasPreviewProps) {
   const store = useMemo(() => createPipelineStore(pipeline), [pipeline]);
+  const runStore = useMemo(() => {
+    const created = createRunStore();
+    if (run.length > 0) {
+      created.getState().start();
+      created.getState().applyEvents(run);
+    }
+    return created;
+  }, [run]);
   return (
     <PipelineStoreProvider store={store}>
-      <div className="h-[30rem] w-[60rem]">
-        <PipelineCanvas />
-      </div>
+      <RunStoreProvider store={runStore}>
+        <div className="h-[30rem] w-[60rem]">
+          <PipelineCanvas />
+        </div>
+      </RunStoreProvider>
     </PipelineStoreProvider>
   );
 }
@@ -112,6 +129,7 @@ function TemplateSwapPreview() {
       createPipelineStore(withData(chain(), 'prompt', { template: '{{question}} {{context}}' })),
     [],
   );
+  const runStore = useMemo(() => createRunStore(), []);
   const swap = () => {
     const { pipeline } = store.getState();
     // The properties panel edits data through store actions; here the story stands in for it.
@@ -121,10 +139,12 @@ function TemplateSwapPreview() {
   };
   return (
     <PipelineStoreProvider store={store}>
-      <Button onClick={swap}>Swap the variables</Button>
-      <div className="h-[30rem] w-[60rem]">
-        <PipelineCanvas />
-      </div>
+      <RunStoreProvider store={runStore}>
+        <Button onClick={swap}>Swap the variables</Button>
+        <div className="h-[30rem] w-[60rem]">
+          <PipelineCanvas />
+        </div>
+      </RunStoreProvider>
     </PipelineStoreProvider>
   );
 }
@@ -144,42 +164,45 @@ function farAway(): Pipeline {
  */
 function ReplaceDocumentPreview() {
   const store = useMemo(() => createPipelineStore(chain()), []);
+  const runStore = useMemo(() => createRunStore(), []);
   const actions = store.getState();
   return (
     <PipelineStoreProvider store={store}>
-      <div className="flex gap-2">
-        <Button
-          onClick={() => {
-            actions.replacePipeline(farAway(), 'import');
-          }}
-        >
-          Import a distant pipeline
-        </Button>
-        <Button
-          onClick={() => {
-            actions.replacePipeline(createEmptyPipeline({ id: 'new', name: 'New' }), 'new');
-          }}
-        >
-          New pipeline
-        </Button>
-        <Button
-          onClick={() => {
-            actions.addNode('input', { x: 0, y: 0 });
-          }}
-        >
-          Add an Input
-        </Button>
-        <Button
-          onClick={() => {
-            actions.undo();
-          }}
-        >
-          Undo
-        </Button>
-      </div>
-      <div className="h-[30rem] w-[60rem]">
-        <PipelineCanvas />
-      </div>
+      <RunStoreProvider store={runStore}>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => {
+              actions.replacePipeline(farAway(), 'import');
+            }}
+          >
+            Import a distant pipeline
+          </Button>
+          <Button
+            onClick={() => {
+              actions.replacePipeline(createEmptyPipeline({ id: 'new', name: 'New' }), 'new');
+            }}
+          >
+            New pipeline
+          </Button>
+          <Button
+            onClick={() => {
+              actions.addNode('input', { x: 0, y: 0 });
+            }}
+          >
+            Add an Input
+          </Button>
+          <Button
+            onClick={() => {
+              actions.undo();
+            }}
+          >
+            Undo
+          </Button>
+        </div>
+        <div className="h-[30rem] w-[60rem]">
+          <PipelineCanvas />
+        </div>
+      </RunStoreProvider>
     </PipelineStoreProvider>
   );
 }
@@ -257,6 +280,38 @@ async function findPort(canvas: HTMLElement, nodeName: string, portName: string)
   const node = await within(canvas).findByRole('group', { name: nodeName });
   return within(node).getByRole('button', { name: portName });
 }
+
+/** The pipeline of a built-in template, with its readable labels and ids. */
+function template(id: PipelineTemplateId): Pipeline {
+  const found = PIPELINE_TEMPLATES.find((candidate) => candidate.id === id);
+  if (found === undefined) throw new Error(`No template "${id}"`);
+  return found.pipeline;
+}
+
+/** Run events: every node of `pipeline` queued, as a run starts. */
+function queued(pipeline: Pipeline): RunEvent[] {
+  return pipeline.nodes.map((node) => ({ type: 'node-status', nodeId: node.id, status: 'queued' }));
+}
+
+/** Run events: `nodeId` runs and ends with `outputs`. */
+function done(nodeId: string, outputs: NodeValues): RunEvent[] {
+  return [
+    { type: 'node-status', nodeId, status: 'running' },
+    { type: 'node-output', nodeId, outputs },
+    { type: 'node-status', nodeId, status: 'done' },
+  ];
+}
+
+/** Run events: `nodeId`, an LLM Call, streams `text` line by line. */
+function streams(nodeId: string, text: string): RunEvent[] {
+  return [
+    { type: 'node-status', nodeId, status: 'running' },
+    ...text.split(/(?<=\n)/).map((line): RunEvent => ({ type: 'node-delta', nodeId, text: line })),
+  ];
+}
+
+const ANSWER =
+  'The sky looks blue because air scatters sunlight.\nShort blue waves scatter far more than red ones,\nso blue light reaches your eyes from every part of the sky.';
 
 const meta = {
   title: 'widgets/PipelineCanvas',
@@ -513,5 +568,128 @@ export const NewPipelineResetsView: Story = {
         0,
       );
     });
+  },
+};
+
+/** The accessible description of the node `name` on the canvas. */
+async function descriptionOf(canvas: HTMLElement, name: string): Promise<string> {
+  const node = await within(canvas).findByRole('group', { name });
+  const id = node.getAttribute('aria-describedby') ?? '';
+  return document.getElementById(id)?.textContent ?? '';
+}
+
+/**
+ * A run in progress: the first nodes are done, the model streams its answer into its card (the
+ * last lines, scrollable), and the Output waits in the queue. The edge into the model moves; the
+ * edges that carried data are thicker.
+ */
+export const RunInProgress: Story = {
+  args: {
+    pipeline: template('ask-a-question'),
+    run: [
+      ...queued(template('ask-a-question')),
+      ...done('question', { value: 'Why is the sky blue?' }),
+      ...done('prompt', { prompt: 'Answer the question: Why is the sky blue?' }),
+      ...streams('model', ANSWER),
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const model = await within(canvasElement).findByRole('group', { name: 'Model' });
+    await expect(within(model).getByText('Running')).toBeVisible();
+    await expect(within(model).getByRole('textbox', { name: 'Model response' })).toBeVisible();
+    await expect(await descriptionOf(canvasElement, 'Model')).toMatch(/Run status: running\./);
+    await expect(await descriptionOf(canvasElement, 'Answer')).toMatch(/Run status: queued\./);
+  },
+};
+
+/** A finished run that took one branch of a Condition: the Output of the other one is skipped. */
+export const RunWithSkippedBranch: Story = {
+  args: {
+    pipeline: template('route-by-sentiment'),
+    run: [
+      ...queued(template('route-by-sentiment')),
+      ...done('review', { value: 'The headphones arrived a day early, and they sound great.' }),
+      ...done('prompt', { prompt: 'Is this review positive or negative?' }),
+      ...done('classifier', { response: 'positive' }),
+      ...done('is-positive', { true: 'positive' }),
+      {
+        type: 'node-status',
+        nodeId: 'negative',
+        status: 'skipped',
+        skipReason: 'branch-not-taken',
+      },
+      ...done('positive', { value: 'positive' }),
+      { type: 'run-finished', status: 'done' },
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const negative = await within(canvasElement).findByRole('group', { name: 'Negative' });
+    await expect(within(negative).getByText('Skipped')).toBeVisible();
+    await expect(await descriptionOf(canvasElement, 'Negative')).toMatch(
+      /Run status: skipped, its branch was not taken\./,
+    );
+    const positive = within(canvasElement).getByRole('group', { name: 'Positive' });
+    await expect(
+      within(positive).getByRole('textbox', { name: 'Positive result' }),
+    ).toHaveTextContent('positive');
+  },
+};
+
+/** A run in which a node failed: the card says why, and the nodes below it are skipped. */
+export const RunFailed: Story = {
+  args: {
+    pipeline: template('extract-a-json-field'),
+    run: [
+      ...queued(template('extract-a-json-field')),
+      ...done('text', { value: 'Hi, I’m Ada Lovelace. Write to me at ada@example.com.' }),
+      ...done('prompt', { prompt: 'Find the name and email of the person in this text.' }),
+      ...done('extractor', { response: 'Ada Lovelace, ada@example.com' }),
+      { type: 'node-status', nodeId: 'parse', status: 'running' },
+      {
+        type: 'node-status',
+        nodeId: 'parse',
+        status: 'error',
+        error: { code: 'invalid-json', message: 'Input "value" is not valid JSON' },
+      },
+      {
+        type: 'node-status',
+        nodeId: 'get-email',
+        status: 'skipped',
+        skipReason: 'upstream-failed',
+      },
+      { type: 'node-status', nodeId: 'email', status: 'skipped', skipReason: 'upstream-failed' },
+      { type: 'run-finished', status: 'error' },
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const parse = await within(canvasElement).findByRole('group', { name: 'Parse JSON' });
+    await expect(within(parse).getByText('Failed')).toBeVisible();
+    await expect(within(parse).getByText('Input "value" is not valid JSON')).toBeVisible();
+    await expect(await descriptionOf(canvasElement, 'Email')).toMatch(
+      /Run status: skipped, a node it depends on failed\./,
+    );
+  },
+};
+
+/** A run stopped while the model was answering: what it had streamed stays on its card. */
+export const RunStopped: Story = {
+  args: {
+    pipeline: template('ask-a-question'),
+    run: [
+      ...queued(template('ask-a-question')),
+      ...done('question', { value: 'Why is the sky blue?' }),
+      ...done('prompt', { prompt: 'Answer the question: Why is the sky blue?' }),
+      ...streams('model', 'The sky looks blue because air'),
+      { type: 'node-status', nodeId: 'model', status: 'cancelled' },
+      { type: 'node-status', nodeId: 'answer', status: 'cancelled' },
+      { type: 'run-finished', status: 'cancelled' },
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const model = await within(canvasElement).findByRole('group', { name: 'Model' });
+    await expect(within(model).getByText('Cancelled')).toBeVisible();
+    await expect(within(model).getByRole('textbox', { name: 'Model response' })).toHaveTextContent(
+      'The sky looks blue because air',
+    );
   },
 };

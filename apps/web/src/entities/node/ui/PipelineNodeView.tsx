@@ -4,17 +4,26 @@ import { memo, useLayoutEffect, useRef } from 'react';
 
 import { handlesKey, summarizeNodeProblems } from '../lib/node-problems';
 import type { PipelineFlowNode } from '../model/flow-node';
-import { NodeCard } from './NodeCard';
+import { NodeCard, type NodeRunSlots } from './NodeCard';
 
-/** React Flow node component for every pipeline node kind. */
+export interface PipelineNodeViewProps extends NodeProps<PipelineFlowNode> {
+  /** What the current run shows on the card; the canvas composes it (see `NodeRunSlots`). */
+  run?: NodeRunSlots | undefined;
+}
+
+/**
+ * React Flow node component for every pipeline node kind. Used as it is, it shows the node without
+ * a run; the canvas wraps it to add one.
+ */
 export const PipelineNodeView = memo(function PipelineNodeView({
   id,
   data,
   selected,
-}: NodeProps<PipelineFlowNode>) {
+  run,
+}: PipelineNodeViewProps) {
   const { node, issues } = data;
   useHandlesRefresh(id, handlesKey(getNodePorts(node), summarizeNodeProblems(node.id, issues)));
-  return <NodeCard node={node} selected={selected} issues={issues} />;
+  return <NodeCard node={node} selected={selected} issues={issues} run={run} />;
 });
 
 /**

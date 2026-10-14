@@ -118,6 +118,30 @@
   --xy-edge-stroke-width: 3;
 }
 
+/*
+ * During a run, the canvas marks the path of an edge that carried data with `edge-carried`: thicker.
+ * While the edge's target works on that data, it is `edge-flowing`: thicker, with dashes that move
+ * along it, or stand still when the user prefers reduced motion.
+ */
+.react-flow__edge-path.edge-carried,
+.react-flow__edge-path.edge-flowing {
+  stroke-width: 3.5;
+}
+.react-flow__edge-path.edge-flowing {
+  stroke-dasharray: 8 4;
+  animation: edge-flow 0.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge-path.edge-flowing {
+    animation: none;
+  }
+}
+@keyframes edge-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
 /* React Flow's grey (#999) attribution link fails WCAG contrast on a plain surface. */
 .react-flow__attribution a {
   color: var(--pb-fg-muted);
