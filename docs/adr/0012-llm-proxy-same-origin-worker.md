@@ -18,7 +18,7 @@ The API sends no CORS headers and answers a preflight with 404, so pages on othe
 **Routes.**
 
 - `GET /api/health` answers `{ "ok": true }`.
-- `POST /api/llm/stream` takes an `LlmRequest` as JSON (`Content-Type: application/json`, which a cross-site form cannot send) and checks it with `LLM_REQUEST_SCHEMA`. The body may be at most 845 KB: two prompts of `LLM_PROMPT_MAX_LENGTH` characters at 4 bytes each, plus the other fields.
+- `POST /api/llm/stream` takes an `LlmRequest` as JSON (`Content-Type: application/json`, which a cross-site form cannot send) and checks it with `LLM_REQUEST_SCHEMA`. The body may be at most 845 KB: two prompts of `LLM_PROMPT_MAX_LENGTH` characters with a margin of 4 bytes per character, plus the other fields. Real text fits (UTF-8 takes up to 3 bytes per character), though a prompt made of characters JSON escapes, at 6 bytes each, may not.
 - An error before streaming starts is an `LlmErrorResponse`, `{ "error": { "code", "message" } }`: 400 for a bad body, 413 for a body over the limit, 429 for a rate limit (404 for an unknown API path, 500 for an unexpected failure).
 - Otherwise the answer is `text/event-stream`: `formatLlmStreamEvent` events, the text as `token`s and then `done`, or an `error` event once the status has been sent. Every stream ends with `done` or `error` unless the client disconnects. An `LlmError` from a provider keeps its code and message; any other error becomes `upstream-error` with a generic message, and the proxy never sends `network`, which belongs to the client.
 
@@ -33,7 +33,9 @@ The API sends no CORS headers and answers a preflight with 404, so pages on othe
 
 **Limits and headers.** Two rate limiting bindings, keyed by `cf-connecting-ip`: `LLM_RATE_LIMITER` (30 requests per 10 seconds) counts every LLM request, before the body is read, so bad requests count too; `REAL_PROVIDER_RATE_LIMITER` (20 per 60 seconds) also counts requests to a provider that needs a key, since those call a real model. Exceeding either gives 429 `rate-limited`. `_headers` applies only to static assets, so API responses set their own security headers with Hono's `secureHeaders` (`default-src 'none'`, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `Cross-Origin-Resource-Policy: same-origin`, `Referrer-Policy: no-referrer`).
 
-**Local development and types.** `pnpm dev` runs Vite (port 5173) and `wrangler dev` (port 8787) together, and Vite forwards `/api/` to `wrangler dev` in dev and preview, so the browser sees one origin as in production. `wrangler dev` alone serves the last SPA build and the API, like the deployed Worker. Runtime and binding types come from `wrangler types` (`apps/proxy/worker-configuration.d.ts`, committed); `pnpm typecheck` fails when they are out of date. Tests call the Hono app with `app.request()` and fake bindings in Node.
+**Local development and types.** `pnpm dev` runs Vite (port 5173) and `wrangler dev` together, and Vite forwards `/api/` to `wrangler dev` in dev and preview, so the browser sees one origin as in production. `wrangler.jsonc` fixes the dev port at 8787, so `wrangler dev` fails when the port is taken instead of moving to another one where Vite would not find it. `wrangler dev` alone serves the last SPA build and the API, like the deployed Worker. Tests call the Hono app with `app.request()` and fake bindings in Node.
+
+Runtime and binding types come from `wrangler types` (`apps/proxy/worker-configuration.d.ts`). The file is not committed: the proxy's `postinstall` generates it on every `pnpm install`, so ESLint's type-aware rules and `tsc` find it locally and in CI, and `typecheck` regenerates it before `tsc`. A committed copy would need a `wrangler types --check` to stay current, and almost every `wrangler` release changes the generated header (the `workerd` version), so each weekly Renovate update would fail CI until someone regenerated the file by hand.
 
 ## Consequences
 
@@ -41,7 +43,7 @@ The API sends no CORS headers and answers a preflight with 404, so pages on othe
 - The SPA and the proxy deploy together as one Worker version, so they can never be out of step; a broken Worker bundle blocks the SPA deploy too, which CI catches with `wrangler deploy --dry-run`.
 - The script runs only for `/api/*` and for the rare request that matches no asset, so serving the SPA stays free of Worker invocations.
 - Rate limit counters are kept per Cloudflare location and are eventually consistent: a guard against abuse, not an exact quota. Users behind one IP address share it.
-- After changing `wrangler.jsonc` or upgrading `wrangler`, run `pnpm cf-typegen` in `apps/proxy`.
+- Types follow `wrangler.jsonc` and the installed `wrangler` without a manual step; after editing `wrangler.jsonc`, `pnpm --filter @pipeline-builder/proxy cf-typegen` (or the next install or typecheck) updates them for the editor. An install with `--ignore-scripts` leaves them out, and then lint and `tsc` fail until `cf-typegen` runs.
 - `wrangler dev` prints `Network connection lost` when a client disconnects mid-stream; that is the runtime reporting the disconnect, after which the proxy stops the provider.
 
 ## Alternatives considered
@@ -50,3 +52,4 @@ The API sends no CORS headers and answers a preflight with 404, so pages on othe
 - **Calling providers from the browser** — the CSP would allow third-party origins, the client would parse each provider's stream format, and nothing would rate-limit the app.
 - **The key in the JSON body** — easier to log or persist by mistake together with the request; the `Authorization` header is where keys normally travel and where logging tools expect to redact them.
 - **Rate limits in KV or a Durable Object** — exact, but slower and more code; the built-in rate limiting binding is enough to stop abuse.
+- **Committing the generated types** with a Renovate rule that keeps `wrangler` updates from merging themselves — works, but every update then needs a manual regeneration; generating on install needs none.
