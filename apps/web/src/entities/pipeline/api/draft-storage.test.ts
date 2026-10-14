@@ -1,6 +1,13 @@
-import { addNode, createEmptyPipeline, serializePipeline } from '@pipeline-builder/core';
+import {
+  addNode,
+  createEmptyPipeline,
+  SCHEMA_VERSION,
+  serializePipeline,
+} from '@pipeline-builder/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+// A file saved by the released version 1 app, the one the e2e tests import.
+import pipelineV1 from '../../../../e2e/fixtures/pipeline-v1.json?raw';
 import {
   DRAFT_STORAGE_KEY,
   loadDraft,
@@ -38,6 +45,30 @@ describe('loadDraft', () => {
       status: 'restored',
       pipeline,
       migratedFrom: null,
+      repairs: [],
+      backedUp: false,
+    });
+    expect(storage.getItem(UNREADABLE_DRAFT_STORAGE_KEY)).toBeNull();
+  });
+
+  it('restores a draft saved in an older schema version, migrated to the current one', () => {
+    storage.setItem(DRAFT_STORAGE_KEY, pipelineV1);
+
+    expect(loadDraft()).toMatchObject({
+      status: 'restored',
+      pipeline: {
+        schemaVersion: SCHEMA_VERSION,
+        nodes: [
+          { label: 'Input 1' },
+          { label: 'Prompt 1' },
+          {
+            label: 'LLM Call 1',
+            data: { provider: 'mock', model: 'mock', temperature: 0.3, maxTokens: 512 },
+          },
+          { label: 'Output 1' },
+        ],
+      },
+      migratedFrom: 1,
       repairs: [],
       backedUp: false,
     });

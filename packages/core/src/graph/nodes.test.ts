@@ -229,11 +229,13 @@ describe('updateNodeData', () => {
     const before = samplePipeline();
     const after = edited(updateNodeData(before, 'llm', { temperature: 1.2, maxTokens: 64 }));
     expect(findNode(after, 'llm')?.data).toEqual({
+      provider: 'mock',
       model: 'mock',
       temperature: 1.2,
       maxTokens: 64,
     });
     expect(findNode(before, 'llm')?.data).toEqual({
+      provider: 'mock',
       model: 'mock',
       temperature: 0.7,
       maxTokens: 512,

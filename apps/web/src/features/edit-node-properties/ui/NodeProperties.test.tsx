@@ -57,7 +57,14 @@ describe('NodeProperties', () => {
     renderForm('llm-call');
 
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('LLM Call 1');
-    expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('mock');
+    const provider = screen.getByRole('combobox', { name: 'Provider' });
+    expect(provider).toHaveDisplayValue('Mock (no API key)');
+    expect(provider).toHaveAccessibleDescription(
+      'The mock provider streams sample text and needs no API key.',
+    );
+    const model = screen.getByRole('textbox', { name: 'Model' });
+    expect(provider.compareDocumentPosition(model)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(model).toHaveValue('mock');
     expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toHaveValue(0.7);
     expect(screen.getByRole('spinbutton', { name: 'Max tokens' })).toHaveValue(512);
   });

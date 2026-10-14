@@ -4,8 +4,15 @@ import type { NodePorts } from '../ports';
 import { isBlank, NUMBER_MESSAGE, REQUIRED_MESSAGE } from './field-rules';
 import type { NodeDefinition } from './node-definition';
 
+/** Providers an LLM Call node can send its prompt to. Stage A5 adds the real ones. */
+export const LLM_PROVIDERS = ['mock'] as const;
+
+/** Provider an LLM Call node sends its prompt to; `mock` streams sample text without an API key. */
+export type LlmProvider = (typeof LLM_PROVIDERS)[number];
+
 /** Data of an LLM Call node. */
 export interface LlmCallNodeData {
+  readonly provider: LlmProvider;
   /** Model id passed to the provider; the built-in mock provider accepts any value. */
   readonly model: string;
   readonly temperature: number;
@@ -16,6 +23,7 @@ export interface LlmCallNodeData {
 export const LLM_MAX_TOKENS_LIMIT = 32_768;
 
 export const LLM_CALL_DATA_SCHEMA = z.object({
+  provider: z.enum(LLM_PROVIDERS),
   model: z.string(),
   temperature: z.number(),
   maxTokens: z.number(),
@@ -46,11 +54,16 @@ const PORTS: NodePorts = {
 export const LLM_CALL_DEFINITION: NodeDefinition<LlmCallNodeData> = {
   title: 'LLM Call',
   description: 'Sends the prompt to a language model and streams back its response.',
-  createData: () => ({ model: 'mock', temperature: 0.7, maxTokens: 512 }),
+  createData: () => ({ provider: 'mock', model: 'mock', temperature: 0.7, maxTokens: 512 }),
   getPorts: () => PORTS,
   dataSchema: LLM_CALL_DATA_SCHEMA,
   rulesSchema: LLM_CALL_RULES_SCHEMA,
   fields: {
+    provider: {
+      label: 'Provider',
+      description: 'The mock provider streams sample text and needs no API key.',
+      optionLabels: { mock: 'Mock (no API key)' },
+    },
     model: { label: 'Model', description: 'The mock provider answers for any model.' },
     temperature: {
       label: 'Temperature',

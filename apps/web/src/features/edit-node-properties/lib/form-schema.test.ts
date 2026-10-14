@@ -31,7 +31,7 @@ describe('nodeFormSchema', () => {
     expect(
       messages('llm-call', {
         label: '  ',
-        data: { model: 'mock', temperature: 5, maxTokens: Number.NaN },
+        data: { provider: 'mock', model: 'mock', temperature: 5, maxTokens: Number.NaN },
       }),
     ).toEqual({
       label: 'Required',

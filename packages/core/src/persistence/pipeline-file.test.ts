@@ -11,6 +11,7 @@ import {
 import { createEmptyPipeline, type Pipeline, type PipelineEdge } from '../pipeline';
 import { SCHEMA_VERSION } from '../schema-version';
 import { validatePipeline } from '../validation/validate-pipeline';
+import { PIPELINE_V1 } from './fixtures/pipeline-v1';
 import type { JsonObject } from './json';
 import type { Migration } from './migrations';
 import {
@@ -51,7 +52,12 @@ const INPUT = nodeOf(
   { x: -240, y: 0 },
 );
 const PROMPT = nodeOf('prompt', 'prompt', { template: 'Answer: {{question}}' }, { x: 0, y: 12.5 });
-const LLM = nodeOf('llm-call', 'llm', { model: 'mock', temperature: 0.7, maxTokens: 512 });
+const LLM = nodeOf('llm-call', 'llm', {
+  provider: 'mock',
+  model: 'mock',
+  temperature: 0.7,
+  maxTokens: 512,
+});
 const TRANSFORM = nodeOf('transform', 'parse', { operation: 'parse-json', path: '' });
 const CONDITION = nodeOf('condition', 'check', { operator: 'contains', operand: 'yes' });
 const OUTPUT = nodeOf('output', 'out', { format: 'markdown' }, { x: 960, y: -80 });
@@ -152,7 +158,7 @@ describe('serializePipeline', () => {
       })),
       nodes: [
         {
-          data: { maxTokens: 512, temperature: 0.7, model: 'mock' },
+          data: { maxTokens: 512, temperature: 0.7, model: 'mock', provider: 'mock' },
           position: LLM.position,
           label: LLM.label,
           kind: LLM.kind,
@@ -279,9 +285,21 @@ describe('parsePipelineFile', () => {
     ],
     [
       'a missing data field',
-      { nodes: [{ ...LLM, data: { model: 'mock', temperature: 0.7 } }] },
+      { nodes: [{ ...LLM, data: { provider: 'mock', model: 'mock', temperature: 0.7 } }] },
       'nodes[0].data.maxTokens',
       'Invalid input: expected number, received undefined',
+    ],
+    [
+      'an LLM Call without a provider',
+      { nodes: [{ ...LLM, data: { model: 'mock', temperature: 0.7, maxTokens: 512 } }] },
+      'nodes[0].data.provider',
+      'Invalid input: expected "mock"',
+    ],
+    [
+      'a provider the app does not know',
+      { nodes: [{ ...LLM, data: { ...LLM.data, provider: 'openai' } }] },
+      'nodes[0].data.provider',
+      'Invalid input: expected "mock"',
     ],
     [
       'an option the kind does not have',
@@ -329,7 +347,7 @@ describe('parsePipelineFile', () => {
     const unfinished = pipelineOf([
       nodeOf('input', 'in', { valueType: 'number', value: 'ten' }),
       nodeOf('prompt', 'prompt', { template: '   ' }),
-      nodeOf('llm-call', 'llm', { model: '', temperature: 5, maxTokens: 0.5 }),
+      nodeOf('llm-call', 'llm', { provider: 'mock', model: '', temperature: 5, maxTokens: 0.5 }),
       nodeOf('transform', 'parse', { operation: 'get-field', path: '' }),
     ]);
 
@@ -349,7 +367,7 @@ describe('parsePipelineFile', () => {
           ...LLM,
           selected: true,
           position: { ...LLM.position, z: 1 },
-          data: { ...LLM.data, provider: 'openai' },
+          data: { ...LLM.data, seed: 42 },
         },
         OUTPUT,
       ],
@@ -461,6 +479,59 @@ describe('parsePipelineFile', () => {
     expect(validatePipeline(pipeline).byEdge.get('e1')).toEqual([
       expect.objectContaining({ code: 'dangling-edge', missing: 'port' }),
     ]);
+  });
+
+  // Input → Prompt → LLM Call (temperature 0.3) → Output, exported by the released version 1 app.
+  describe('a file exported by the version 1 app', () => {
+    it('loads migrated from version 1 without repairs', () => {
+      const { pipeline, migratedFrom, repairs } = parseOk(PIPELINE_V1);
+
+      expect(migratedFrom).toBe(1);
+      expect(repairs).toEqual([]);
+      expect(pipeline.schemaVersion).toBe(SCHEMA_VERSION);
+      expect(pipeline.name).toBe('Untitled pipeline');
+      expect(pipeline.nodes.map((node) => node.label)).toEqual([
+        'Input 1',
+        'Prompt 1',
+        'LLM Call 1',
+        'Output 1',
+      ]);
+      expect(pipeline.edges).toHaveLength(3);
+    });
+
+    it('gives the LLM Call the mock provider and keeps its settings', () => {
+      const { pipeline } = parseOk(PIPELINE_V1);
+      expect(pipeline.nodes.find((node) => node.kind === 'llm-call')?.data).toEqual({
+        provider: 'mock',
+        model: 'mock',
+        temperature: 0.3,
+        maxTokens: 512,
+      });
+    });
+
+    it('changes nothing else: saved again, it is the same file with the provider added', () => {
+      const { pipeline } = parseOk(PIPELINE_V1);
+      const version2 = PIPELINE_V1.replace('"schemaVersion": 1,', '"schemaVersion": 2,').replace(
+        '"model": "mock",',
+        '"provider": "mock",\n        "model": "mock",',
+      );
+      expect(serializePipeline(pipeline)).toBe(version2);
+    });
+
+    it('reads back without a migration once saved in the current version', () => {
+      const { pipeline } = parseOk(PIPELINE_V1);
+      const saved = parseOk(serializePipeline(pipeline));
+      expect(saved.migratedFrom).toBeNull();
+      expect(saved.pipeline).toEqual(pipeline);
+    });
+
+    it('validates as it did in version 1, where only its empty Input was a problem', () => {
+      const { pipeline } = parseOk(PIPELINE_V1);
+      const input = pipeline.nodes.find((node) => node.kind === 'input');
+      expect(validatePipeline(pipeline).issues).toEqual([
+        expect.objectContaining({ code: 'invalid-field', nodeId: input?.id, field: 'value' }),
+      ]);
+    });
   });
 
   describe('with migrations', () => {

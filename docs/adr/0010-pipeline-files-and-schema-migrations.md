@@ -61,10 +61,11 @@ Repairs are returned with the pipeline (`{ edgeId, reason }`) so the app can tel
 
 ## Migrations
 
-Every change to the persisted shape, oldest first; each row is one entry of `MIGRATIONS` in `packages/core/src/persistence/migrations.ts`. Version 1 is the first persisted shape: the node catalogue of [ADR 0005](./0005-node-catalogue-and-typed-ports.md) with the data fields of [ADR 0007](./0007-zod-schemas-for-node-data-in-core.md). There are no migrations yet.
+Every change to the persisted shape, oldest first; each row is one entry of `MIGRATIONS` in `packages/core/src/persistence/migrations.ts`. Version 1 is the first persisted shape: the node catalogue of [ADR 0005](./0005-node-catalogue-and-typed-ports.md) with the data fields of [ADR 0007](./0007-zod-schemas-for-node-data-in-core.md).
 
-| From | To  | Change |
-| ---- | --- | ------ |
+| From | To  | Change                                                                                                                                                             |
+| ---- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1    | 2   | LLM Call gains `provider` (`mock`): every LLM Call node gets `mock`, the only provider version 1 had ([#61](https://github.com/dr1m11/pipeline-builder/issues/61)) |
 
 ## Consequences
 
@@ -74,7 +75,7 @@ Every change to the persisted shape, oldest first; each row is one entry of `MIG
 - Fields the format does not define are lost when a file is opened and saved again.
 - The autosaved draft goes through the same parser, so a draft written before a deploy that bumps the version is migrated on the next load. A draft the parser refuses (a newer version after a rollback, damaged text) is moved to `pb:pipeline:unreadable` and reported rather than overwritten by the next save. A draft that loads only with repairs is reported too, and its saved text is copied there before the next save replaces it.
 - All tabs of the editor autosave to the same `pb:pipeline` key, so with several tabs open the last save wins and the next load shows only that tab's pipeline. Collaboration in A9 replaces this.
-- Version 2 lands in [#61](https://github.com/dr1m11/pipeline-builder/issues/61): a `provider` field on LLM Call nodes with a migration from version 1, tested against a real version 1 export from production. It adds the first row to [Migrations](#migrations).
+- Version 2 came with [#61](https://github.com/dr1m11/pipeline-builder/issues/61): a `provider` field on LLM Call nodes and the first row of [Migrations](#migrations). Its fixture is a real version 1 file, exported from production before the change and kept byte for byte (`packages/core/src/persistence/fixtures/pipeline-v1.ts` for core tests, `apps/web/e2e/fixtures/pipeline-v1.json` for the e2e import and the draft restore test). Later versions keep a fixture of each released version the same way.
 
 ## Alternatives considered
 
