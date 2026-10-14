@@ -92,6 +92,25 @@ function branches(count: number): Pipeline {
   );
 }
 
+/** A review routed by a Condition to an Output, or through a Transform to another. */
+function routed(review: string): Pipeline {
+  return pipelineOf(
+    [
+      textInput('review', review),
+      node('condition', 'check', { operator: 'contains', operand: 'great' }),
+      outputNode('praise'),
+      node('transform', 'tidy', { operation: 'trim' }),
+      outputNode('complaint'),
+    ],
+    [
+      link('review.value', 'check.value'),
+      link('check.true', 'praise.value'),
+      link('check.false', 'tidy.value'),
+      link('tidy.result', 'complaint.value'),
+    ],
+  );
+}
+
 /** A JSON Input and a Get field Transform that fails on it (`missing-field`). */
 const FAILING_LOOKUP = [jsonInput('data', '{"a":1}'), getField('lookup', 'b')];
 const DATA_TO_LOOKUP = link('data.value', 'lookup.value');
@@ -697,28 +716,33 @@ describe('runPipeline', () => {
         running('m1'),
       ]);
     });
+
+    it('frees the place of a node that fails to compute its outputs', async () => {
+      const pipeline = pipelineOf(
+        [...FAILING_LOOKUP, outputNode('found'), ...GREETING.nodes],
+        [DATA_TO_LOOKUP, link('lookup.result', 'found.value'), ...GREETING.edges],
+      );
+      const { result, events } = start(pipeline, { maxConcurrency: 1 });
+
+      await expect(result).resolves.toMatchObject(ok({ status: 'error' }));
+      expect(statuses(events)).toMatchObject({ lookup: 'error', result: 'done' });
+    });
+
+    it('frees the place of an LLM Call whose request fails', async () => {
+      const { result, events, llm } = start(branches(2), { maxConcurrency: 1 });
+      await flush();
+      callAt(llm.calls, 0).fail(new LlmError('invalid-key', 'The API key was rejected'));
+      await flush();
+
+      expect(llm.open()).toHaveLength(1);
+      callAt(llm.calls, 1).send('Second');
+      callAt(llm.calls, 1).end();
+      await expect(result).resolves.toMatchObject(ok({ status: 'error' }));
+      expect(statuses(events)).toMatchObject({ m1: 'error', o1: 'skipped', o2: 'done' });
+    });
   });
 
   describe('skipping', () => {
-    /** A review routed by a Condition to an Output, or through a Transform to another. */
-    function routed(review: string): Pipeline {
-      return pipelineOf(
-        [
-          textInput('review', review),
-          node('condition', 'check', { operator: 'contains', operand: 'great' }),
-          outputNode('praise'),
-          node('transform', 'tidy', { operation: 'trim' }),
-          outputNode('complaint'),
-        ],
-        [
-          link('review.value', 'check.value'),
-          link('check.true', 'praise.value'),
-          link('check.false', 'tidy.value'),
-          link('tidy.result', 'complaint.value'),
-        ],
-      );
-    }
-
     it('skips the branch a Condition does not take, down to its end', async () => {
       const pipeline = routed('Sounds great');
       const { result, events } = start(pipeline);
@@ -878,6 +902,27 @@ describe('runPipeline', () => {
       expectOrderedEvents(pipeline, events);
     });
 
+    it('cancels two streams in flight at once', async () => {
+      const pipeline = branches(2);
+      const { result, events, llm, controller } = start(pipeline);
+      await flush();
+      expect(llm.open()).toHaveLength(2);
+
+      controller.abort();
+
+      await expect(result).resolves.toMatchObject(ok({ status: 'cancelled' }));
+      expect(events.slice(-5)).toEqual([
+        cancelled('m1'),
+        cancelled('o1'),
+        cancelled('m2'),
+        cancelled('o2'),
+        finished('cancelled'),
+      ]);
+      await flush();
+      expect(llm.open()).toEqual([]);
+      expectOrderedEvents(pipeline, events);
+    });
+
     it('cancels rather than fails when the stream throws on abort', async () => {
       const { result, events, controller } = start(QUESTION, {}, 'throw');
       await flush();
@@ -1032,6 +1077,125 @@ describe('runPipeline', () => {
     });
   });
 
+  describe('aborting from onEvent', () => {
+    /** Starts a run whose `onEvent` aborts the signal on the first event `abortsOn` matches. */
+    function startAbortingOn(pipeline: Pipeline, abortsOn: (event: RunEvent) => boolean) {
+      const controller = abortController();
+      const llm = fakeLlm();
+      const events: RunEvent[] = [];
+      let reporting = false;
+      let reentered = false;
+      const result = runPipeline(pipeline, {
+        llm: llm.client,
+        signal: controller.signal,
+        onEvent: (event) => {
+          reentered ||= reporting;
+          reporting = true;
+          events.push(event);
+          if (!controller.signal.aborted && abortsOn(event)) controller.abort();
+          reporting = false;
+        },
+      });
+      return { result, events, llm, reentered: () => reentered };
+    }
+
+    it('lets the node whose output is reported end done, then cancels the rest', async () => {
+      const run = startAbortingOn(GREETING, (event) => event.type === 'node-output');
+
+      await expect(run.result).resolves.toEqual(
+        ok({
+          status: 'cancelled',
+          nodes: new Map([
+            ['name', 'done'],
+            ['greeting', 'cancelled'],
+            ['result', 'cancelled'],
+          ]),
+        }),
+      );
+      expect(run.events).toEqual([
+        ...['name', 'greeting', 'result'].map(queued),
+        running('name'),
+        output('name', { value: 'Ada' }),
+        done('name'),
+        cancelled('greeting'),
+        cancelled('result'),
+        finished('cancelled'),
+      ]);
+      expect(run.reentered()).toBe(false);
+    });
+
+    it('cancels the nodes left when it aborts on a node done before the end', async () => {
+      const run = startAbortingOn(GREETING, (event) => isStatus(event, 'done', 'greeting'));
+
+      await expect(run.result).resolves.toMatchObject(ok({ status: 'cancelled' }));
+      expect(run.events.slice(-4)).toEqual([
+        output('greeting', { prompt: 'Hello, Ada!' }),
+        done('greeting'),
+        cancelled('result'),
+        finished('cancelled'),
+      ]);
+      expectOrderedEvents(GREETING, run.events);
+    });
+
+    it.each([
+      ['the last node is done', (event: RunEvent) => isStatus(event, 'done', 'result')],
+      ['the run finishes', (event: RunEvent) => event.type === 'run-finished'],
+    ])('changes nothing once every node has ended: %s', async (_, abortsOn) => {
+      const run = startAbortingOn(GREETING, abortsOn);
+
+      await expect(run.result).resolves.toMatchObject(ok({ status: 'done' }));
+      expect(run.events.filter((event) => event.type === 'run-finished')).toEqual([
+        finished('done'),
+      ]);
+      expectOrderedEvents(GREETING, run.events);
+    });
+
+    it('reports the skipped nodes of the step before it cancels the rest', async () => {
+      const pipeline = routed('Sounds great');
+      const run = startAbortingOn(pipeline, (event) => isStatus(event, 'skipped', 'tidy'));
+
+      await expect(run.result).resolves.toMatchObject(ok({ status: 'cancelled' }));
+      expect(run.events.slice(-4)).toEqual([
+        skipped('tidy', 'branch-not-taken'),
+        skipped('complaint', 'branch-not-taken'),
+        cancelled('praise'),
+        finished('cancelled'),
+      ]);
+      expectOrderedEvents(pipeline, run.events);
+    });
+
+    it('cancels after a chunk without calling onEvent inside itself', async () => {
+      const run = startAbortingOn(QUESTION, (event) => event.type === 'node-delta');
+      await flush();
+      const call = callAt(run.llm.calls, 0);
+
+      call.send('Because', ' of');
+
+      await expect(run.result).resolves.toMatchObject(ok({ status: 'cancelled' }));
+      expect(run.events.slice(-4)).toEqual([
+        delta('model', 'Because'),
+        cancelled('model'),
+        cancelled('answer'),
+        finished('cancelled'),
+      ]);
+      await flush();
+      expect(call.closed).toBe(true);
+      expect(run.reentered()).toBe(false);
+    });
+
+    it('sends no request when it aborts as an LLM Call starts', async () => {
+      const run = startAbortingOn(QUESTION, (event) => isStatus(event, 'running', 'model'));
+
+      await expect(run.result).resolves.toMatchObject(ok({ status: 'cancelled' }));
+      expect(run.llm.calls).toEqual([]);
+      expect(run.events.slice(-3)).toEqual([
+        cancelled('model'),
+        cancelled('answer'),
+        finished('cancelled'),
+      ]);
+    });
+  });
+
   describe('beforeNode', () => {
     it('is awaited before each node starts, which stays queued until then', async () => {
       const steps = gate();
@@ -1078,6 +1242,11 @@ describe('runPipeline', () => {
     it.each([
       ['on the first event', GREETING, (event: RunEvent) => isStatus(event, 'queued')],
       ['when the model starts', QUESTION, (event: RunEvent) => isStatus(event, 'running', 'model')],
+      [
+        'when the last node is done',
+        GREETING,
+        (event: RunEvent) => isStatus(event, 'done', 'result'),
+      ],
       ['when the run finishes', GREETING, (event: RunEvent) => event.type === 'run-finished'],
     ])(
       'rejects the run and reports nothing more when it throws %s',

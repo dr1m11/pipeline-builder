@@ -53,12 +53,13 @@ export interface NodeRunError {
  * 1. `node-status` `queued` for every node, in pipeline order.
  * 2. For each node that starts, once every node its inputs come from is `done`: `running`, then the
  *    chunks of an LLM Call's response as `node-delta`s, then `node-output` right before `done`, or
- *    `error`. A node that cannot run gets `skipped` instead, right after the node that left it
- *    without an input value.
+ *    `error`. Right after a node ends, the nodes it leaves without an input value get `skipped`,
+ *    breadth-first: first those it feeds, then those they feed, each level in edge order.
  * 3. On abort, `cancelled` for every node still queued or running, in pipeline order.
  * 4. `run-finished`, last and once.
  *
- * Every node ends with exactly one of `done`, `error`, `skipped` or `cancelled`.
+ * In a run that resolves, every node ends with exactly one of `done`, `error`, `skipped` or
+ * `cancelled`. A run that rejects (a bug, see `runPipeline`) stops reporting where it failed.
  */
 export type RunEvent =
   | {
@@ -82,7 +83,13 @@ export interface RunOptions {
   readonly llm: LlmClient;
   /** Cancels the run when it aborts; every LLM request gets it too, so it stops the streams. */
   readonly signal: AbortSignalLike;
-  /** Receives every event, synchronously, as it happens. */
+  /**
+   * Receives every event, synchronously, as it happens; it is never called again before it returns.
+   * It may abort the signal: the run is cancelled once the engine has reported the change in
+   * progress (a node's output and status, and the nodes skipped because of it), so that node still
+   * ends with its own status. An abort once every node has ended, such as on `run-finished` or on
+   * the last node's `done`, changes nothing. Throwing is a bug: the run rejects with the error.
+   */
   readonly onEvent: (event: RunEvent) => void;
   /**
    * Awaited before each node starts (step-by-step mode): the node stays `queued`, holding its place
@@ -145,10 +152,12 @@ interface NodeState {
  *   branches keep running, and the run ends `error`.
  * - An LLM Call fails with the `LlmError` its client throws, with `upstream-error` for anything else
  *   the client throws, and with `bad-request`, without calling the client, when its prompts break
- *   `LLM_REQUEST_SCHEMA` (a blank prompt). Text inputs take strings only (`not-text`).
+ *   `LLM_REQUEST_SCHEMA` (a blank prompt, a prompt or system prompt too long). Text inputs take
+ *   strings only (`not-text`).
  * - When `options.signal` aborts, every node still queued or running is `cancelled` and the run
  *   ends `cancelled` at once, without waiting for streams to close or `beforeNode` to settle;
- *   anything a stream sends afterwards is dropped.
+ *   anything a stream sends afterwards is dropped. An abort from inside `onEvent` takes effect once
+ *   the engine has reported the change in progress (see `RunOptions.onEvent`).
  *
  * The promise resolves when the run ends. It rejects only on a bug: `maxConcurrency` out of range
  * (`RangeError`), `onEvent` throwing or `beforeNode` rejecting without an abort; the run then stops
@@ -215,14 +224,36 @@ function startRun(
   let nodeFailed = false;
   /** Set once the run ended or failed: nothing is reported or started after that. */
   let finished = false;
+  /** Set when the signal aborts; the run is cancelled as soon as no step is in progress. */
+  let abortRequested = false;
+  /** How many synchronous steps are in progress, one inside another. */
+  let depth = 0;
+
+  /**
+   * Runs a synchronous step of the run, such as reporting an event or ending a node. An abort that
+   * arrives meanwhile, even from `onEvent`, cancels the run only once the outermost step is over:
+   * `onEvent` is never called again before it returns, and the node being reported keeps the status
+   * it was given.
+   */
+  function step(action: () => void): void {
+    depth += 1;
+    try {
+      action();
+    } finally {
+      depth -= 1;
+    }
+    if (depth === 0 && abortRequested) cancel();
+  }
 
   const emit = (event: RunEvent): void => {
-    if (finished) return;
-    try {
-      onEvent(event);
-    } catch (error) {
-      fail(error);
-    }
+    step(() => {
+      if (finished) return;
+      try {
+        onEvent(event);
+      } catch (error) {
+        fail(error);
+      }
+    });
   };
 
   const setStatus = (state: NodeState, status: 'queued' | 'running' | 'cancelled'): void => {
@@ -231,36 +262,50 @@ function startRun(
   };
 
   function finish(status: RunOutcome): void {
-    emit({ type: 'run-finished', status });
     if (finished) return;
+    // Before the last event, so that aborting on it changes nothing.
     finished = true;
-    signal.removeEventListener('abort', cancel);
+    signal.removeEventListener('abort', requestCancel);
     const nodes = new Map(Array.from(states, ([id, state]) => [id, state.status]));
+    try {
+      onEvent({ type: 'run-finished', status });
+    } catch (error) {
+      reject(error);
+      return;
+    }
     resolve({ status, nodes });
   }
 
+  // Once the promise has settled, rejecting it again does nothing.
   function fail(error: unknown): void {
-    if (finished) return;
     finished = true;
-    signal.removeEventListener('abort', cancel);
+    signal.removeEventListener('abort', requestCancel);
     reject(error);
+  }
+
+  function requestCancel(): void {
+    abortRequested = true;
+    if (depth === 0) cancel();
   }
 
   function cancel(): void {
     if (finished) return;
-    for (const state of states.values()) {
-      if (state.status === 'queued' || state.status === 'running') setStatus(state, 'cancelled');
-    }
-    finish('cancelled');
+    step(() => {
+      for (const state of states.values()) {
+        if (state.status === 'queued' || state.status === 'running') setStatus(state, 'cancelled');
+      }
+      finish('cancelled');
+    });
   }
 
   /**
-   * Whether the run has ended. An aborted signal cancels it first: the listener normally has, but
-   * a client may see the abort, and end its stream, before an event reports it.
+   * Whether the run has ended or is being cancelled. An aborted signal cancels it first: the
+   * listener normally has, but a client may see the abort, and end its stream, before the listener
+   * runs.
    */
   const stopped = (): boolean => {
-    if (signal.aborted) cancel();
-    return finished;
+    if (signal.aborted) requestCancel();
+    return finished || abortRequested;
   };
 
   /** Records how a node ended and reports it. */
@@ -287,35 +332,39 @@ function startRun(
 
   /**
    * Ends a node that ran, passes its outputs on, skips the nodes left without an input value (and
-   * the nodes below them), then starts the nodes that became ready or finishes the run.
+   * the nodes below them, breadth-first), then starts the nodes that became ready or finishes the
+   * run. One step: an abort meanwhile cancels the run only after all of it has been reported.
    */
   function settle(state: NodeState, settlement: Settlement): void {
-    started -= 1;
-    end(state, settlement);
-    const ended: [NodeState, Ending][] = [[state, settlement]];
-    // Nodes skipped on the way are appended, and the loop reaches them too.
-    for (const [source, ending] of ended) {
-      for (const { sourcePort, target, targetPort } of source.links) {
-        // Already skipped through another of its inputs.
-        if (target.status !== 'queued') continue;
-        target.waiting -= 1;
-        const value = ending.status === 'done' ? valueOf(ending.outputs, sourcePort) : undefined;
-        if (value !== undefined) {
-          target.inputs.set(targetPort, value);
-          if (target.waiting === 0) ready.push(target);
-          continue;
+    step(() => {
+      started -= 1;
+      end(state, settlement);
+      const ended: [NodeState, Ending][] = [[state, settlement]];
+      // Nodes skipped on the way are appended, and the loop reaches them too.
+      for (const [source, ending] of ended) {
+        for (const { sourcePort, target, targetPort } of source.links) {
+          // Already skipped through another of its inputs.
+          if (target.status !== 'queued') continue;
+          target.waiting -= 1;
+          const value = ending.status === 'done' ? valueOf(ending.outputs, sourcePort) : undefined;
+          if (value !== undefined) {
+            target.inputs.set(targetPort, value);
+            if (target.waiting === 0) ready.push(target);
+            continue;
+          }
+          const skipped: Ending = { status: 'skipped', skipReason: missingReason(ending) };
+          end(target, skipped);
+          ended.push([target, skipped]);
         }
-        const skipped: Ending = { status: 'skipped', skipReason: missingReason(ending) };
-        end(target, skipped);
-        ended.push([target, skipped]);
       }
-    }
-    if (unfinished === 0) finish(nodeFailed ? 'error' : 'done');
-    else startReadyNodes();
+      // Once every node has ended, an abort during this step has nothing left to cancel.
+      if (unfinished === 0) finish(nodeFailed ? 'error' : 'done');
+      else startReadyNodes();
+    });
   }
 
   function startReadyNodes(): void {
-    while (!finished && started < maxConcurrency) {
+    while (!finished && !abortRequested && started < maxConcurrency) {
       const state = ready.shift();
       if (state === undefined) return;
       started += 1;
@@ -335,18 +384,19 @@ function startRun(
     }
     if (stopped()) return;
     setStatus(state, 'running');
-    // `onEvent` threw: the run has failed, so no request goes out.
-    if (finished) return;
+    // `onEvent` aborted or threw: the node is cancelled or the run failed, so no request goes out.
+    if (stopped()) return;
     // Own keys only, so a `__proto__` port gets its value like any other.
     const inputs: NodeValues = Object.fromEntries(state.inputs);
     const settlement =
       node.kind === 'llm-call' ? await callModel(node, inputs) : evaluate(node, inputs);
-    // The run stopped while the model was answering.
-    if (settlement === undefined) return;
+    // The run stopped while the model was answering. A stream may end early or throw when the
+    // signal aborts: a cut response is no output, and that failure is the cancellation.
+    if (settlement === undefined || stopped()) return;
     settle(state, settlement);
   }
 
-  /** Streams an LLM Call's response; `undefined` when the run stopped first. */
+  /** Streams an LLM Call's response; `undefined` when the run stopped while reading it. */
   async function callModel(
     node: NodeOfKind<'llm-call'>,
     inputs: NodeValues,
@@ -363,19 +413,19 @@ function startRun(
         emit({ type: 'node-delta', nodeId: node.id, text: chunk });
       }
     } catch (error) {
-      // A request may end by throwing when the signal aborts: that is the cancellation.
-      return stopped() ? undefined : { status: 'error', error: llmFailure(error) };
+      return { status: 'error', error: llmFailure(error) };
     }
-    // It may also just end early, with part of the response: that is no output either.
-    return stopped() ? undefined : { status: 'done', outputs: { response } };
+    return { status: 'done', outputs: { response } };
   }
 
-  for (const state of states.values()) setStatus(state, 'queued');
-  if (stopped()) return;
-  signal.addEventListener('abort', cancel, { once: true });
-  for (const state of states.values()) if (state.waiting === 0) ready.push(state);
-  if (unfinished === 0) finish('done');
-  else startReadyNodes();
+  step(() => {
+    for (const state of states.values()) setStatus(state, 'queued');
+    if (stopped()) return;
+    signal.addEventListener('abort', requestCancel, { once: true });
+    for (const state of states.values()) if (state.waiting === 0) ready.push(state);
+    if (unfinished === 0) finish('done');
+    else startReadyNodes();
+  });
 }
 
 function evaluate(node: EvaluableNode, inputs: NodeValues): Settlement {
