@@ -185,6 +185,13 @@ describe('executeCommand', () => {
     expect(executeCommand(samplePipeline(), command)).toEqual({ ok: false, error });
   });
 
+  it('throws on a command type it does not know', () => {
+    // @ts-expect-error -- a command type that does not exist, as only a type error would allow.
+    expect(() => executeCommand(samplePipeline(), { type: 'group-nodes' })).toThrow(
+      'Unhandled variant',
+    );
+  });
+
   it('throws when the command reuses an id', () => {
     expect(() =>
       executeCommand(samplePipeline(), {
@@ -249,5 +256,10 @@ describe('commandMergeKey', () => {
     },
   ])('never merges a $type command', (command) => {
     expect(commandMergeKey(command)).toBeNull();
+  });
+
+  it('throws on a command type it does not know', () => {
+    // @ts-expect-error -- a command type that does not exist, as only a type error would allow.
+    expect(() => commandMergeKey({ type: 'group-nodes' })).toThrow('Unhandled variant');
   });
 });

@@ -193,13 +193,16 @@ describe('recordChange', () => {
     });
 
     it('does not merge after an undo', () => {
+      // After the undo, `b → d` continues the top entry `a → b` with the same key within the
+      // window: only the entry that could be redone stops the merge.
       const recorded = recordAll([
         entry(a, b, { mergeKey: KEY, at: 0 }),
-        entry(b, c, { mergeKey: 'label:llm', at: 2000 }),
+        entry(b, c, { mergeKey: 'label:llm', at: 100 }),
       ]);
       const undone = possible(undoChange(recorded));
       expect(undone.pipeline).toBe(b);
-      const next = entry(b, d, { mergeKey: KEY, at: 2100 });
+      expect(undone.history.future).toHaveLength(1);
+      const next = entry(b, d, { mergeKey: KEY, at: 200 });
       const history = recordChange(undone.history, next);
       expect(history.past).toHaveLength(2);
       expect(history.past.at(-1)).toBe(next);

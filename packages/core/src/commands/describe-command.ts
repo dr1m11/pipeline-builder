@@ -1,3 +1,4 @@
+import { assertNever } from '../assert-never';
 import { findNode } from '../graph/nodes';
 import { getNodeFields } from '../nodes/node-fields';
 import { NODE_DEFINITIONS } from '../nodes/registry';
@@ -42,6 +43,8 @@ export function describeCommand(command: PipelineCommand, before: Pipeline): str
     }
     case 'replace-pipeline':
       return describeReplacement(command);
+    default:
+      return assertNever(command);
   }
 }
 
@@ -87,6 +90,8 @@ function describeReplacement(command: ReplacePipelineCommand): string {
       return `Load template “${command.pipeline.name}”`;
     case 'new':
       return 'New pipeline';
+    default:
+      return assertNever(command.reason);
   }
 }
 

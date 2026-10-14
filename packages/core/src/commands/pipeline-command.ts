@@ -1,3 +1,4 @@
+import { assertNever } from '../assert-never';
 import type { Position } from '../geometry';
 import { connect, type ConnectionCandidate, type ConnectionError } from '../graph/connections';
 import {
@@ -122,6 +123,8 @@ export function executeCommand(
       return ok(addElements(pipeline, command));
     case 'replace-pipeline':
       return ok(command.pipeline);
+    default:
+      return assertNever(command);
   }
 }
 
@@ -144,6 +147,8 @@ export function commandMergeKey(command: PipelineCommand): string | null {
     case 'add-elements':
     case 'replace-pipeline':
       return null;
+    default:
+      return assertNever(command);
   }
 }
 

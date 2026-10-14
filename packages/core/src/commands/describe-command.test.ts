@@ -157,6 +157,16 @@ describe('describeCommand', () => {
     );
   });
 
+  it('throws on a command type or a replacement reason it does not know', () => {
+    // @ts-expect-error -- a command type that does not exist, as only a type error would allow.
+    expect(() => describeOnSample({ type: 'group-nodes' })).toThrow('Unhandled variant');
+    const pipeline = createEmptyPipeline({ id: 'q', name: 'Copy' });
+    expect(() =>
+      // @ts-expect-error -- a reason that does not exist, as only a type error would allow.
+      describeOnSample({ type: 'replace-pipeline', pipeline, reason: 'duplicate' }),
+    ).toThrow('Unhandled variant');
+  });
+
   it('describes a new blank pipeline', () => {
     const pipeline = createEmptyPipeline({ id: 'q', name: 'Untitled pipeline' });
     expect(describeOnSample({ type: 'replace-pipeline', pipeline, reason: 'new' })).toBe(
