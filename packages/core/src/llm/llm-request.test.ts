@@ -4,6 +4,7 @@ import * as z from 'zod';
 import {
   LLM_CALL_DEFINITION,
   LLM_CALL_RULES_SCHEMA,
+  LLM_MODEL_MAX_LENGTH,
   LLM_PROVIDERS,
   type LlmCallNodeData,
   type LlmProvider,
@@ -67,6 +68,13 @@ describe('LLM_REQUEST_SCHEMA', () => {
     });
   });
 
+  it('rejects a model id longer than the node allows, as the provider gets it as it is', () => {
+    expect(ruleMessages({ model: 'm'.repeat(LLM_MODEL_MAX_LENGTH) })).toEqual({});
+    expect(ruleMessages({ model: 'm'.repeat(LLM_MODEL_MAX_LENGTH + 1) })).toEqual({
+      model: ['Must be at most 200 characters'],
+    });
+  });
+
   it('rejects a system prompt that is present but not text', () => {
     expect(ruleMessages({ system: undefined })).toHaveProperty('system');
     expect(ruleMessages({ system: null })).toHaveProperty('system');
@@ -86,6 +94,8 @@ describe('LLM_REQUEST_SCHEMA', () => {
   it.each<Partial<LlmCallNodeData>>([
     {},
     { model: '' },
+    { model: 'm'.repeat(LLM_MODEL_MAX_LENGTH) },
+    { model: 'm'.repeat(LLM_MODEL_MAX_LENGTH + 1) },
     { temperature: 0 },
     { temperature: 2 },
     { temperature: -0.1 },

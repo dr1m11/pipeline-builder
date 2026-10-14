@@ -90,6 +90,7 @@ export { type ConditionNodeData, type ConditionOperator } from './nodes/conditio
 export { type InputNodeData, type InputValueType } from './nodes/input';
 export {
   isLlmProvider,
+  LLM_MODEL_MAX_LENGTH,
   LLM_PROVIDER_INFO,
   LLM_PROVIDERS,
   type LlmCallNodeData,

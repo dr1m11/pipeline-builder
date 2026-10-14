@@ -62,6 +62,12 @@ export function llmProviderChanges(
 /** Largest `maxTokens` an LLM Call node accepts. */
 export const LLM_MAX_TOKENS_LIMIT = 32_768;
 
+/**
+ * Longest model id, in characters, an LLM Call node accepts. Real ids are far shorter; the limit
+ * keeps what the proxy forwards to a provider bounded.
+ */
+export const LLM_MODEL_MAX_LENGTH = 200;
+
 export const LLM_CALL_DATA_SCHEMA = z.object({
   provider: z.enum(LLM_PROVIDERS),
   model: z.string(),
@@ -69,11 +75,15 @@ export const LLM_CALL_DATA_SCHEMA = z.object({
   maxTokens: z.number(),
 });
 
+const MODEL_MESSAGE = `Must be at most ${String(LLM_MODEL_MAX_LENGTH)} characters`;
 const TEMPERATURE_MESSAGE = 'Must be from 0 to 2';
 const MAX_TOKENS_MESSAGE = `Must be a whole number from 1 to ${String(LLM_MAX_TOKENS_LIMIT)}`;
 
 export const LLM_CALL_RULES_SCHEMA = LLM_CALL_DATA_SCHEMA.extend({
-  model: z.string().refine((model) => !isBlank(model), REQUIRED_MESSAGE),
+  model: z
+    .string()
+    .max(LLM_MODEL_MAX_LENGTH, MODEL_MESSAGE)
+    .refine((model) => !isBlank(model), REQUIRED_MESSAGE),
   temperature: z.number(NUMBER_MESSAGE).min(0, TEMPERATURE_MESSAGE).max(2, TEMPERATURE_MESSAGE),
   maxTokens: z
     .number(NUMBER_MESSAGE)
