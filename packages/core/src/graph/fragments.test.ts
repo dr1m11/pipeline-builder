@@ -274,6 +274,17 @@ describe('instantiateFragment', () => {
       ]);
     });
 
+    it('treats a label that only ends like a default one as custom', () => {
+      // "Version2" is as long as "Prompt " plus a number, but does not start with the title.
+      expect(pastedLabels('prompt', ['Version2'], ['Version2'])).toEqual(['Version2 (copy)']);
+    });
+
+    it('adds " (copy)" to a default label whose next number would not be free', () => {
+      // Past the safe integers, the next number rounds back to the label itself.
+      const huge = `Prompt ${String(Number.MAX_SAFE_INTEGER + 1)}`;
+      expect(pastedLabels('prompt', [huge], [huge])).toEqual([`${huge} (copy)`]);
+    });
+
     it('adds " (copy)" to a taken custom label, then numbers the copies', () => {
       expect(pastedLabels('prompt', ['Summarize'], ['Summarize'])).toEqual(['Summarize (copy)']);
       expect(
@@ -300,6 +311,18 @@ describe('instantiateFragment', () => {
       const words = `${'a'.repeat(52)} ${'b'.repeat(7)}`;
       expect(words).toHaveLength(NODE_LABEL_MAX_LENGTH);
       expect(pastedLabels('prompt', [words], [words])).toEqual([`${'a'.repeat(52)} (copy)`]);
+    });
+
+    it('does not cut a character outside the basic plane in two', () => {
+      // The emoji takes two UTF-16 code units; the cut falls between them in the first label only.
+      const split = `${'a'.repeat(52)}🤖${'b'.repeat(6)}`;
+      const whole = `${'a'.repeat(51)}🤖${'b'.repeat(7)}`;
+      expect(split).toHaveLength(NODE_LABEL_MAX_LENGTH);
+      expect(whole).toHaveLength(NODE_LABEL_MAX_LENGTH);
+      expect(pastedLabels('prompt', [split, whole], [split, whole])).toEqual([
+        `${'a'.repeat(52)} (copy)`,
+        `${'a'.repeat(51)}🤖 (copy)`,
+      ]);
     });
   });
 });

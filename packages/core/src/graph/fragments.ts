@@ -82,7 +82,9 @@ function freeLabel(
   if (!used.has(node.label)) return node.label;
   const prefix = `${NODE_DEFINITIONS[node.kind].title} `;
   if (node.label.startsWith(prefix) && LABEL_NUMBER.test(node.label.slice(prefix.length))) {
-    return nextNodeLabel(node.kind, nodes);
+    // `nextNodeLabel` counts in floating point, so past the safe integers it can repeat a label.
+    const next = nextNodeLabel(node.kind, nodes);
+    if (!used.has(next)) return next;
   }
   for (let copy = 1; ; copy++) {
     const label = copyLabel(node.label, copy);
@@ -90,9 +92,13 @@ function freeLabel(
   }
 }
 
+// The high half of a surrogate pair at the end of a string: a character cut in two.
+const SPLIT_SURROGATE_PAIR = /[\uD800-\uDBFF]$/;
+
 /** "Name (copy)" for the first copy and "Name (copy N)" after it, cut to the label length limit. */
 function copyLabel(label: string, copy: number): string {
   const suffix = copy === 1 ? ' (copy)' : ` (copy ${String(copy)})`;
-  const base = label.slice(0, NODE_LABEL_MAX_LENGTH - suffix.length).trimEnd();
+  const cut = label.slice(0, NODE_LABEL_MAX_LENGTH - suffix.length);
+  const base = cut.replace(SPLIT_SURROGATE_PAIR, '').trimEnd();
   return `${base}${suffix}`;
 }
