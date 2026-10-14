@@ -1,3 +1,4 @@
+import { editor } from './editor';
 import { expect, test } from './fixtures';
 
 test.describe('templates', () => {
@@ -6,28 +7,23 @@ test.describe('templates', () => {
     expectNoA11yViolations,
   }) => {
     await page.goto('/');
-    const canvas = page.getByRole('main', { name: 'Pipeline canvas' });
-    const inspector = page.getByRole('complementary', { name: 'Inspector' });
-    const heading = page.getByRole('heading', { level: 1 });
-    const fileToolbar = page.getByRole('toolbar', { name: 'File' });
-    const notifications = page.getByRole('region', { name: 'Notifications (F8)' });
-    // Nodes and edges are both groups. Names are exact: an edge is named after its nodes.
-    const node = (name: string) => canvas.getByRole('group', { name, exact: true });
-    const emptyHint = canvas.getByText(
-      'Drag a node from the palette, or click one, to start your pipeline.',
-    );
-    const chooseFromNewMenu = async (item: string) => {
-      await fileToolbar.getByRole('button', { name: 'New' }).click();
-      await page.getByRole('menuitem', { name: item }).click();
-    };
+    const {
+      heading,
+      emptyHint,
+      templateButtons,
+      node,
+      edge,
+      problemsSummary,
+      toasts,
+      chooseFromNewMenu,
+    } = editor(page);
     // The whole card is on screen, up to subpixel rounding of the fitted zoom.
     const expectWholeCard = (name: string) => expect(node(name)).toBeInViewport({ ratio: 0.99 });
 
     // The empty canvas offers the templates.
-    const templates = canvas.getByRole('group', { name: 'Start from a template:' });
-    await expect(templates).toBeVisible();
+    await expect(templateButtons).toBeVisible();
     await expectNoA11yViolations();
-    await templates.getByRole('button', { name: 'Ask a question' }).click();
+    await templateButtons.getByRole('button', { name: 'Ask a question' }).click();
 
     // A ready pipeline, fitted into view and without problems.
     await expect(heading).toHaveText('Ask a question');
@@ -36,9 +32,9 @@ test.describe('templates', () => {
     }
     // The button left with the hint, so focus moves to the canvas instead of the page.
     await expect(node('Question')).toBeFocused();
-    await expect(node('Question value to Answer prompt question')).toBeAttached();
-    await expect(node('Model response to Answer value')).toBeAttached();
-    await expect(inspector.getByRole('button', { name: 'Problems: none' })).toBeVisible();
+    await expect(edge('Question value to Answer prompt question')).toBeAttached();
+    await expect(edge('Model response to Answer value')).toBeAttached();
+    await expect(problemsSummary).toHaveAccessibleName('Problems: none');
     await expect(emptyHint).toHaveCount(0);
 
     // Another template replaces it, and the toast tells what happened.
@@ -48,8 +44,8 @@ test.describe('templates', () => {
       await expectWholeCard(name);
     }
     await expect(node('Question')).toHaveCount(0);
-    await expect(notifications.getByRole('listitem')).toContainText('Loaded “Route by sentiment”');
-    await expect(inspector.getByRole('button', { name: 'Problems: none' })).toBeVisible();
+    await expect(toasts).toContainText('Loaded “Route by sentiment”');
+    await expect(problemsSummary).toHaveAccessibleName('Problems: none');
     await expectNoA11yViolations();
 
     // One undo brings the previous pipeline back.
@@ -63,7 +59,7 @@ test.describe('templates', () => {
     await expect(heading).toHaveText('Untitled pipeline');
     await expect(node('Question')).toHaveCount(0);
     await expect(emptyHint).toBeVisible();
-    await expect(templates).toBeVisible();
+    await expect(templateButtons).toBeVisible();
     await expectNoA11yViolations();
   });
 });
