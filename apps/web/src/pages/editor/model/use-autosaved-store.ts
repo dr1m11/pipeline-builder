@@ -1,7 +1,7 @@
-import { createEmptyPipeline } from '@pipeline-builder/core';
 import { useEffect, useRef, useState } from 'react';
 
 import {
+  createBlankPipeline,
   createPipelineStore,
   type DraftLoadResult,
   type DraftSaveError,
@@ -44,10 +44,7 @@ export function useAutosavedStore() {
 // draft already moved aside.
 function restore() {
   const draft = loadDraft();
-  const pipeline =
-    draft.status === 'restored'
-      ? draft.pipeline
-      : createEmptyPipeline({ id: 'draft', name: 'Untitled pipeline' });
+  const pipeline = draft.status === 'restored' ? draft.pipeline : createBlankPipeline('draft');
   return { store: createPipelineStore(pipeline), draft };
 }
 

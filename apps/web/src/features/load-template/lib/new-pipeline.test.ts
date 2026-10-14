@@ -1,5 +1,4 @@
 import {
-  createEmptyPipeline,
   type Pipeline,
   PIPELINE_TEMPLATES,
   type PipelineNode,
@@ -8,12 +7,7 @@ import {
 } from '@pipeline-builder/core';
 import { describe, expect, it } from 'vitest';
 
-import {
-  BLANK_PIPELINE_NAME,
-  blankPipeline,
-  isBlankPipeline,
-  pipelineFromTemplate,
-} from './new-pipeline';
+import { pipelineFromTemplate } from './new-pipeline';
 
 /** An id generator that counts: "id-1", "id-2"… */
 function counter(): () => string {
@@ -71,28 +65,5 @@ describe('pipelineFromTemplate', () => {
     const second = pipelineFromTemplate(template, createId);
 
     expect(idsOf(second).filter((id) => idsOf(first).includes(id))).toEqual([]);
-  });
-});
-
-describe('blankPipeline', () => {
-  it('makes an empty untitled pipeline with a fresh id', () => {
-    expect(blankPipeline(() => 'fresh')).toEqual(
-      createEmptyPipeline({ id: 'fresh', name: 'Untitled pipeline' }),
-    );
-  });
-});
-
-describe('isBlankPipeline', () => {
-  it('accepts an empty untitled pipeline whatever its id', () => {
-    expect(isBlankPipeline(createEmptyPipeline({ id: 'draft', name: BLANK_PIPELINE_NAME }))).toBe(
-      true,
-    );
-  });
-
-  it('rejects a pipeline with nodes or another name', () => {
-    expect(isBlankPipeline(pipelineFromTemplate(firstTemplate(), counter()))).toBe(false);
-    expect(isBlankPipeline(createEmptyPipeline({ id: 'draft', name: 'Ask a question' }))).toBe(
-      false,
-    );
   });
 });

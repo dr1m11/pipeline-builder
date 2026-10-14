@@ -4,12 +4,6 @@ import {
   type PipelineFileError,
 } from '@pipeline-builder/core';
 
-import { formatShortcut } from '@/shared/lib/keyboard';
-
-// The editor's undo shortcut (features/undo-redo), which undoes the import as long as nothing
-// else has changed since.
-const UNDO_SHORTCUT = 'Mod+Z';
-
 /** Why a chosen file was not imported: its text is not a pipeline, or it could not be read. */
 export type ImportFailure = PipelineFileError | { readonly code: 'unreadable' };
 
@@ -70,14 +64,4 @@ function failureReason(failure: ImportFailure): string {
 /** `text` ending with a full stop, unless it already ends with punctuation. */
 function sentence(text: string): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
-}
-
-/**
- * What a screen reader announces in place of the toast's Undo button, which it may not reach in
- * time: the shortcut that does the same, "Press Ctrl+Z to undo the import" ("⌘Z" on Apple
- * platforms, written without a plus as macOS writes shortcuts).
- */
-export function undoImportAltText(apple: boolean): string {
-  const keys = formatShortcut(UNDO_SHORTCUT, apple).join(apple ? '' : '+');
-  return `Press ${keys} to undo the import`;
 }

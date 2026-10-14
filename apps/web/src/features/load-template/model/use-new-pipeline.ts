@@ -1,12 +1,15 @@
 import type { Pipeline, PipelineTemplate, ReplacePipelineCommand } from '@pipeline-builder/core';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
-import { usePipelineStoreApi } from '@/entities/pipeline';
-import { isApplePlatform } from '@/shared/lib/keyboard';
+import {
+  createBlankPipeline,
+  isBlankPipeline,
+  usePipelineStoreApi,
+  useReplacementUndo,
+} from '@/entities/pipeline';
 import { useToast } from '@/shared/ui/toast';
 
-import { blankPipeline, isBlankPipeline, pipelineFromTemplate } from '../lib/new-pipeline';
-import { undoReplacementAltText } from '../lib/undo-alt-text';
+import { pipelineFromTemplate } from '../lib/new-pipeline';
 
 /** Ways to start over in the surrounding pipeline store. */
 export interface NewPipelineActions {
@@ -20,14 +23,13 @@ const createId = () => crypto.randomUUID();
 
 /**
  * Starts a new pipeline in place of the one being edited, as one undoable step; the canvas fits the
- * new one into view. Replacing a pipeline with nodes says so in a toast with Undo, because the
- * history lives in memory only and autosave overwrites the replaced draft (see docs/adr/0009);
- * screen readers hear the Ctrl+Z (⌘Z) shortcut instead.
+ * new one into view. Replacing a pipeline with nodes says so in a toast with Undo, as the replaced
+ * draft is kept nowhere else.
  */
 export function useNewPipeline(): NewPipelineActions {
   const store = usePipelineStoreApi();
   const { toast } = useToast();
-  const [apple] = useState(() => isApplePlatform());
+  const undoAction = useReplacementUndo();
 
   return useMemo(() => {
     const replace = (
@@ -42,15 +44,7 @@ export function useNewPipeline(): NewPipelineActions {
       toast({
         tone: 'success',
         title,
-        action: {
-          label: 'Undo',
-          altText: undoReplacementAltText(apple),
-          onClick: () => {
-            // Only this replacement: once the pipeline has changed again, or the replacement was
-            // undone already, undo would revert something else.
-            if (store.getState().pipeline === next) store.getState().undo();
-          },
-        },
+        action: undoAction(next, 'bring back the previous pipeline'),
       });
     };
 
@@ -60,8 +54,8 @@ export function useNewPipeline(): NewPipelineActions {
       },
       startBlank: () => {
         if (isBlankPipeline(store.getState().pipeline)) return;
-        replace(blankPipeline(createId), 'new', 'Started a blank pipeline');
+        replace(createBlankPipeline(createId()), 'new', 'Started a blank pipeline');
       },
     };
-  }, [store, toast, apple]);
+  }, [store, toast, undoAction]);
 }
