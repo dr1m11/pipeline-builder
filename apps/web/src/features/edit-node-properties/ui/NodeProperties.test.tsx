@@ -80,6 +80,58 @@ describe('NodeProperties', () => {
     );
   });
 
+  it('switches a default model along with the provider, as one undo step', async () => {
+    const { store, node, user } = renderForm('llm-call');
+    const provider = screen.getByRole('combobox', { name: 'Provider' });
+    const model = screen.getByRole('textbox', { name: 'Model' });
+
+    await user.selectOptions(provider, 'Anthropic (your API key)');
+
+    expect(node().data).toMatchObject({ provider: 'anthropic', model: 'claude-haiku-5-5' });
+    expect(model).toHaveValue('claude-haiku-5-5');
+    expect(store.getState().history.past).toHaveLength(1);
+
+    store.getState().undo();
+
+    expect(node().data).toMatchObject({ provider: 'mock', model: 'mock' });
+    await waitFor(() => {
+      expect(provider).toHaveDisplayValue('Mock (no API key)');
+    });
+    expect(model).toHaveValue('mock');
+  });
+
+  it('fills a blank model with the default of the new provider', async () => {
+    const { node, user } = renderForm('llm-call');
+    const model = screen.getByRole('textbox', { name: 'Model' });
+
+    await user.clear(model);
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Provider' }),
+      'OpenAI (your API key)',
+    );
+
+    expect(node().data).toMatchObject({ provider: 'openai', model: 'gpt-6-luna' });
+    expect(model).toHaveValue('gpt-6-luna');
+    await waitFor(() => {
+      expect(model).toBeValid();
+    });
+  });
+
+  it('keeps a model the user chose when the provider changes', async () => {
+    const { node, user } = renderForm('llm-call');
+    const model = screen.getByRole('textbox', { name: 'Model' });
+
+    await user.clear(model);
+    await user.type(model, 'claude-opus-5-5');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Provider' }),
+      'Anthropic (your API key)',
+    );
+
+    expect(node().data).toMatchObject({ provider: 'anthropic', model: 'claude-opus-5-5' });
+    expect(model).toHaveValue('claude-opus-5-5');
+  });
+
   it('applies a template as it is typed, so the ports follow it', async () => {
     const { node, user } = renderForm('prompt');
     const template = screen.getByRole('textbox', { name: 'Template' });
