@@ -3,7 +3,7 @@ import { secureHeaders } from 'hono/secure-headers';
 
 import { apiError } from './api-error';
 import type { Bindings } from './bindings';
-import { createLlmStreamHandler, limitRequestBody } from './llm-stream';
+import { createLlmStreamHandler, limitLlmRequests, limitRequestBody } from './llm-stream';
 import type { Providers } from './providers/provider';
 
 export interface AppOptions {
@@ -34,7 +34,12 @@ export function createApp({ providers }: AppOptions): Hono<{ Bindings: Bindings 
   );
 
   app.get('/api/health', (c) => c.json({ ok: true }));
-  app.post('/api/llm/stream', limitRequestBody, createLlmStreamHandler(providers));
+  app.post(
+    '/api/llm/stream',
+    limitLlmRequests,
+    limitRequestBody,
+    createLlmStreamHandler(providers),
+  );
   app.all('/api/*', (c) => apiError(c, 404, 'bad-request', 'There is no such API endpoint'));
 
   app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));

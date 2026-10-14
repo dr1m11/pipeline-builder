@@ -251,7 +251,7 @@ describe('POST /api/llm/stream', () => {
       expect((await readEvents(response)).at(-1)).toEqual({ type: 'done' });
     });
 
-    it('answers 413 to a body larger than the limit, before reading it', async () => {
+    it('answers 413 to a streamed body once it grows larger than the limit', async () => {
       const prompt = 'x'.repeat(MAX_REQUEST_BYTES);
 
       const response = await postStream({ ...REQUEST, prompt });
@@ -261,6 +261,20 @@ describe('POST /api/llm/stream', () => {
         code: 'bad-request',
         message: 'The request body is larger than 845 KB',
       });
+    });
+
+    it('answers 413 to a Content-Length over the limit, and still counts the request', async () => {
+      const body = JSON.stringify({ ...REQUEST, prompt: 'x'.repeat(MAX_REQUEST_BYTES) });
+      const env = createEnv();
+
+      const response = await postStream(body, {
+        env,
+        headers: { 'Content-Length': String(new TextEncoder().encode(body).byteLength) },
+      });
+
+      expect(response.status).toBe(413);
+      expect((await readError(response)).code).toBe('bad-request');
+      expect(env.LLM_RATE_LIMITER.limit).toHaveBeenCalledExactlyOnceWith({ key: CLIENT_IP });
     });
 
     it('accepts a prompt and a system prompt of the longest length, in any script', async () => {
@@ -304,6 +318,16 @@ describe('POST /api/llm/stream', () => {
         message: 'Too many requests. Wait a minute and try again.',
       });
       expect(stream).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an oversized body', JSON.stringify({ ...REQUEST, prompt: 'x'.repeat(MAX_REQUEST_BYTES) })],
+      ['a body that is not JSON', '{"provider":'],
+    ])('applies the general limit before reading the body, even to %s', async (_case, body) => {
+      const response = await postStream(body, { env: createEnv({ llmLimit: false }) });
+
+      expect(response.status).toBe(429);
+      expect((await readError(response)).code).toBe('rate-limited');
     });
 
     it('also counts requests to a provider that needs a key against the stricter limit', async () => {

@@ -12,6 +12,7 @@ import {
 } from '@pipeline-builder/core';
 import type { Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { createMiddleware } from 'hono/factory';
 import { streamSSE } from 'hono/streaming';
 
 import { apiError } from './api-error';
@@ -22,10 +23,20 @@ type AppContext = Context<{ Bindings: Bindings }>;
 
 /**
  * Largest request body the stream endpoint reads, in bytes: a prompt and a system prompt of
- * `LLM_PROMPT_MAX_LENGTH` characters each at 4 bytes per character (UTF-8 takes at most 3 for a
- * character of the Basic Multilingual Plane), and room for the other fields.
+ * `LLM_PROMPT_MAX_LENGTH` characters each, with a margin of 4 bytes per character, and room for
+ * the other fields. UTF-8 takes up to 3 bytes for a character of the Basic Multilingual Plane, so
+ * any real text fits; a prompt full of characters that JSON escapes (6 bytes each) may not.
  */
 export const MAX_REQUEST_BYTES = 2 * LLM_PROMPT_MAX_LENGTH * 4 + 64 * 1024;
+
+/**
+ * Counts every LLM request against the general rate limit, keyed by client IP, before anything
+ * reads the body: oversized and malformed requests count too. Answers 429 once the limit is used.
+ */
+export const limitLlmRequests = createMiddleware<{ Bindings: Bindings }>(async (c, next) => {
+  const { success } = await c.env.LLM_RATE_LIMITER.limit({ key: clientAddress(c) });
+  return success ? next() : rateLimited(c);
+});
 
 /** Answers 413 to a body larger than `MAX_REQUEST_BYTES`, before anything parses it. */
 export const limitRequestBody = bodyLimit({
@@ -40,22 +51,23 @@ export const limitRequestBody = bodyLimit({
 });
 
 /**
- * Handles `POST /api/llm/stream`. It checks the rate limits and the body, an `LlmRequest` as JSON,
- * and answers a failed check with a JSON error (400 or 429). Then it streams the provider's answer
- * as SSE `LlmStreamEvent`s (`Content-Type: text/event-stream`), which always end with `done` or
- * `error` unless the client disconnects; a disconnect stops the provider.
+ * Handles `POST /api/llm/stream`, after `limitLlmRequests` and `limitRequestBody`. It checks the
+ * body, an `LlmRequest` as JSON, and the stricter rate limit for real models, and answers a failed
+ * check with a JSON error (400 or 429). Then it streams the provider's answer as SSE
+ * `LlmStreamEvent`s (`Content-Type: text/event-stream`), which always end with `done` or `error`
+ * unless the client disconnects; a disconnect stops the provider.
  */
 export function createLlmStreamHandler(providers: Providers) {
   return async (c: AppContext): Promise<Response> => {
-    const client = clientAddress(c);
-    if (!(await c.env.LLM_RATE_LIMITER.limit({ key: client })).success) return rateLimited(c);
-
     const request = await readLlmRequest(c);
     if (!request.ok) return apiError(c, 400, 'bad-request', request.error);
 
     // A provider that needs the user's key calls a real model: it gets the stricter limit too.
     const { needsApiKey } = LLM_PROVIDER_INFO[request.value.provider];
-    if (needsApiKey && !(await c.env.REAL_PROVIDER_RATE_LIMITER.limit({ key: client })).success) {
+    if (
+      needsApiKey &&
+      !(await c.env.REAL_PROVIDER_RATE_LIMITER.limit({ key: clientAddress(c) })).success
+    ) {
       return rateLimited(c);
     }
 
