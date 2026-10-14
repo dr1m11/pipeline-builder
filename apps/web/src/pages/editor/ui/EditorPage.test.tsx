@@ -203,6 +203,22 @@ describe('EditorPage undo and redo', () => {
     ).toBeInTheDocument();
   });
 
+  it('undoes a choice with Ctrl+Z while its select has focus', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Transform' }));
+    const operation = screen.getByRole('combobox', { name: 'Operation' });
+    const original = NODE_DEFINITIONS.transform.createData().operation;
+
+    await user.selectOptions(operation, 'Get field');
+    expect(operation).toHaveFocus();
+    await user.keyboard('{Control>}z{/Control}');
+
+    await waitFor(() => {
+      expect(operation).toHaveValue(original);
+    });
+    expect(undoButton('Add Transform')).toBeEnabled();
+  });
+
   it('leaves Ctrl+Z in a text field to the field', async () => {
     const { user } = renderPage();
     await user.click(screen.getByRole('button', { name: 'Add Prompt' }));

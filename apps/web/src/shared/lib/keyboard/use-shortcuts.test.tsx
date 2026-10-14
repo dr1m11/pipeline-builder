@@ -16,6 +16,14 @@ function Editor() {
     <>
       <button type="button">Run</button>
       <input aria-label="Name" />
+      <input type="search" aria-label="Search" />
+      <input type="number" aria-label="Count" />
+      <textarea aria-label="Description" />
+      <select aria-label="Operation">
+        <option>Trim</option>
+        <option>Parse JSON</option>
+      </select>
+      <input type="checkbox" aria-label="Enabled" />
       <div role="textbox" aria-label="Notes" tabIndex={0} contentEditable />
       <div role="dialog" aria-label="Settings">
         <button type="button">Close</button>
@@ -93,11 +101,16 @@ describe('useShortcuts', () => {
     expect(redo).toHaveBeenCalledOnce();
   });
 
-  it('works while a button has focus', async () => {
+  // Controls that edit no text have no undo of their own: a changed choice can be undone at once.
+  it.each([
+    ['a button', () => screen.getByRole('button', { name: 'Run' })],
+    ['a select', () => screen.getByRole('combobox', { name: 'Operation' })],
+    ['a checkbox', () => screen.getByRole('checkbox', { name: 'Enabled' })],
+  ])('works while %s has focus', async (_control, element) => {
     const user = userEvent.setup();
     render(<Editor />);
 
-    await user.click(screen.getByRole('button', { name: 'Run' }));
+    element().focus();
     await user.keyboard('{Control>}z{/Control}');
 
     expect(undo).toHaveBeenCalledOnce();
@@ -105,6 +118,9 @@ describe('useShortcuts', () => {
 
   it.each([
     ['a text field', () => screen.getByRole('textbox', { name: 'Name' })],
+    ['a search field', () => screen.getByRole('searchbox', { name: 'Search' })],
+    ['a number field', () => screen.getByRole('spinbutton', { name: 'Count' })],
+    ['a textarea', () => screen.getByRole('textbox', { name: 'Description' })],
     ['an editable element', () => screen.getByRole('textbox', { name: 'Notes' })],
     ['a dialog', () => screen.getByRole('button', { name: 'Close' })],
     ['a .nokey element', () => screen.getByRole('button', { name: 'Zoom' })],
