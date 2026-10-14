@@ -6,8 +6,9 @@ import {
 } from '@pipeline-builder/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// A file saved by the released version 1 app, the one the e2e tests import.
+// Files saved by the released version 1 and version 2 apps, the ones the e2e tests import.
 import pipelineV1 from '../../../../e2e/fixtures/pipeline-v1.json?raw';
+import pipelineV2 from '../../../../e2e/fixtures/pipeline-v2.json?raw';
 import {
   DRAFT_STORAGE_KEY,
   loadDraft,
@@ -73,6 +74,32 @@ describe('loadDraft', () => {
       backedUp: false,
     });
     expect(storage.getItem(UNREADABLE_DRAFT_STORAGE_KEY)).toBeNull();
+  });
+
+  it('restores a draft saved in schema version 2 with its LLM Call as it was', () => {
+    storage.setItem(DRAFT_STORAGE_KEY, pipelineV2);
+
+    expect(loadDraft()).toMatchObject({
+      status: 'restored',
+      pipeline: {
+        schemaVersion: SCHEMA_VERSION,
+        name: 'Route by sentiment',
+        nodes: [
+          { label: 'Review' },
+          { label: 'Sentiment prompt' },
+          {
+            label: 'Classifier',
+            data: { provider: 'mock', model: 'mock', temperature: 0, maxTokens: 16 },
+          },
+          { label: 'Is positive?' },
+          { label: 'Positive' },
+          { label: 'Negative' },
+        ],
+      },
+      migratedFrom: 2,
+      repairs: [],
+      backedUp: false,
+    });
   });
 
   it('passes on the repairs made while reading the draft and keeps a copy of it', () => {

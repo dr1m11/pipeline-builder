@@ -7,6 +7,9 @@ import { expect, test } from './fixtures';
 // A pipeline exported by the released version 1 app (schema version 1, before LLM Call nodes had a
 // provider): Input → Prompt → LLM Call → Output, with the LLM Call temperature at 0.3.
 const PIPELINE_V1 = fileURLToPath(new URL('./fixtures/pipeline-v1.json', import.meta.url));
+// The "Route by sentiment" template exported by the released version 2 app (schema version 2, when
+// the mock provider was the only one), with the LLM Call at 16 max tokens.
+const PIPELINE_V2 = fileURLToPath(new URL('./fixtures/pipeline-v2.json', import.meta.url));
 
 test.describe('pipeline files', () => {
   test('exports, imports and migrates pipeline files and autosaves the work', async ({
@@ -40,7 +43,7 @@ test.describe('pipeline files', () => {
     const saved: unknown = JSON.parse(await readFile(savedFile, 'utf8'));
     expect(saved).toMatchObject({
       format: 'pipeline-builder',
-      schemaVersion: 2,
+      schemaVersion: 3,
       name: 'Extract a JSON field',
     });
 
@@ -74,6 +77,22 @@ test.describe('pipeline files', () => {
     await expect(toast('Couldn’t import “notes.txt”')).toContainText('The file is not valid JSON.');
     await expect(heading).toHaveText('Extract a JSON field');
     await expect(node('Text')).toBeVisible();
+
+    // A file saved by version 2 of the app opens as it was: version 3 only adds providers.
+    await importFile(PIPELINE_V2);
+    await expect(toast('Imported “Route by sentiment”')).toContainText(
+      'Updated from schema version 2.',
+    );
+    await expect(heading).toHaveText('Route by sentiment');
+    for (const name of ['Review', 'Sentiment prompt', 'Classifier', 'Is positive?']) {
+      await expect(node(name)).toBeInViewport();
+    }
+    await expect(edge('Is positive? true to Positive value')).toBeAttached();
+    await expect(edge('Is positive? false to Negative value')).toBeAttached();
+    await select('Classifier');
+    await expect(inspector.getByRole('combobox', { name: 'Provider' })).toHaveValue('mock');
+    await expect(inspector.getByRole('textbox', { name: 'Model' })).toHaveValue('mock');
+    await expect(inspector.getByRole('spinbutton', { name: 'Max tokens' })).toHaveValue('16');
 
     // A file saved by version 1 of the app is updated on import: its LLM Call gets the provider
     // that version 1 always used and keeps its settings.

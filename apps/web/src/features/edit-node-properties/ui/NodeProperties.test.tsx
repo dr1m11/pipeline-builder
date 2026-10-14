@@ -6,7 +6,7 @@ import {
   NODE_KINDS,
   type NodeKind,
 } from '@pipeline-builder/core';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -59,14 +59,25 @@ describe('NodeProperties', () => {
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('LLM Call 1');
     const provider = screen.getByRole('combobox', { name: 'Provider' });
     expect(provider).toHaveDisplayValue('Mock (no API key)');
-    expect(provider).toHaveAccessibleDescription(
-      'The mock provider streams sample text and needs no API key.',
-    );
     const model = screen.getByRole('textbox', { name: 'Model' });
     expect(provider.compareDocumentPosition(model)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(model).toHaveValue('mock');
     expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toHaveValue(0.7);
     expect(screen.getByRole('spinbutton', { name: 'Max tokens' })).toHaveValue(512);
+  });
+
+  it('offers the providers by whether they need your API key and says where keys go', () => {
+    renderForm('llm-call');
+
+    const provider = screen.getByRole('combobox', { name: 'Provider' });
+    expect(
+      within(provider)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Mock (no API key)', 'Anthropic (your API key)', 'OpenAI (your API key)']);
+    expect(provider).toHaveAccessibleDescription(
+      'Mock streams sample text. Anthropic and OpenAI use your API key, which is sent only to this app’s own proxy.',
+    );
   });
 
   it('applies a template as it is typed, so the ports follow it', async () => {

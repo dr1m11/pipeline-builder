@@ -57,7 +57,7 @@ Key scenarios:
 - Engine: topological sort, parallel execution of independent branches, node statuses (idle, queued, running, done, error, cancelled).
 - Step-by-step simulation mode highlighting the active node.
 - Mock provider by default: streams fake tokens over SSE, works without a key.
-- Real provider through a dedicated SSE proxy (Hono). The user's key lives only in the browser and is never stored on the server.
+- Real providers, Anthropic and OpenAI, through a dedicated SSE proxy (Hono). The user's key lives only in the browser and is never stored on the server. Providers and their default models: [ADR 0005](./adr/0005-node-catalogue-and-typed-ports.md).
 - Token streaming into the node, cancellation via AbortController, error and timeout handling.
 
 **Collaboration** (last stage)
@@ -98,4 +98,3 @@ Authentication and accounts, server-side graph storage, billing, a mobile editor
 ## 9. Open questions
 
 - Final name and demo domain.
-- Which real LLM providers the proxy supports (one or several).

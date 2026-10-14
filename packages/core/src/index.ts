@@ -55,7 +55,15 @@ export {
 } from './history/history';
 export { type ConditionNodeData, type ConditionOperator } from './nodes/condition';
 export { type InputNodeData, type InputValueType } from './nodes/input';
-export { type LlmCallNodeData, type LlmProvider } from './nodes/llm-call';
+export {
+  isLlmProvider,
+  LLM_PROVIDER_INFO,
+  LLM_PROVIDERS,
+  type LlmCallNodeData,
+  type LlmProvider,
+  llmProviderChanges,
+  type LlmProviderInfo,
+} from './nodes/llm-call';
 export {
   type FieldPresentation,
   type NodeDataSchema,

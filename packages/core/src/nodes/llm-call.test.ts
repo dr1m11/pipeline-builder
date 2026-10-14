@@ -2,12 +2,15 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import * as z from 'zod';
 
 import {
+  isLlmProvider,
   LLM_CALL_DATA_SCHEMA,
   LLM_CALL_DEFINITION,
   LLM_CALL_RULES_SCHEMA,
+  LLM_PROVIDER_INFO,
   LLM_PROVIDERS,
   type LlmCallNodeData,
   type LlmProvider,
+  llmProviderChanges,
 } from './llm-call';
 
 const DEFAULTS = LLM_CALL_DEFINITION.createData();
@@ -17,6 +20,99 @@ function ruleMessages(changes: Partial<LlmCallNodeData>) {
   const result = LLM_CALL_RULES_SCHEMA.safeParse({ ...DEFAULTS, ...changes });
   return result.success ? {} : z.flattenError(result.error).fieldErrors;
 }
+
+describe('LLM_PROVIDERS', () => {
+  it('offers the mock provider first, then Anthropic and OpenAI', () => {
+    expect(LLM_PROVIDERS).toEqual(['mock', 'anthropic', 'openai']);
+  });
+});
+
+describe('LLM_PROVIDER_INFO', () => {
+  it('describes every provider', () => {
+    expect(Object.keys(LLM_PROVIDER_INFO).sort()).toEqual([...LLM_PROVIDERS].sort());
+  });
+
+  it('runs the mock provider without an API key and its default model', () => {
+    expect(LLM_PROVIDER_INFO.mock).toEqual({
+      title: 'Mock',
+      needsApiKey: false,
+      defaultModel: DEFAULTS.model,
+    });
+  });
+
+  it('needs an API key for the real providers and picks a small model of each', () => {
+    expect(LLM_PROVIDER_INFO.anthropic).toEqual({
+      title: 'Anthropic',
+      needsApiKey: true,
+      defaultModel: 'claude-haiku-5-5',
+    });
+    expect(LLM_PROVIDER_INFO.openai).toEqual({
+      title: 'OpenAI',
+      needsApiKey: true,
+      defaultModel: 'gpt-6-luna',
+    });
+  });
+
+  it.each(LLM_PROVIDERS)('gives "%s" a default model that passes the rules', (provider) => {
+    expect(ruleMessages({ provider, model: LLM_PROVIDER_INFO[provider].defaultModel })).toEqual({});
+  });
+});
+
+describe('isLlmProvider', () => {
+  it('accepts every provider', () => {
+    for (const provider of LLM_PROVIDERS) expect(isLlmProvider(provider)).toBe(true);
+  });
+
+  it('rejects unknown values', () => {
+    for (const value of ['gemini', 'Anthropic', '', 'toString', 0, null, undefined]) {
+      expect(isLlmProvider(value)).toBe(false);
+    }
+  });
+});
+
+describe('llmProviderChanges', () => {
+  const data = (provider: LlmProvider, model: string): LlmCallNodeData => ({
+    ...DEFAULTS,
+    provider,
+    model,
+  });
+
+  it('moves the default model of the old provider to the default of the new one', () => {
+    expect(llmProviderChanges(DEFAULTS, 'anthropic')).toEqual({
+      provider: 'anthropic',
+      model: 'claude-haiku-5-5',
+    });
+    expect(llmProviderChanges(data('anthropic', 'claude-haiku-5-5'), 'openai')).toEqual({
+      provider: 'openai',
+      model: 'gpt-6-luna',
+    });
+    expect(llmProviderChanges(data('openai', 'gpt-6-luna'), 'mock')).toEqual({
+      provider: 'mock',
+      model: 'mock',
+    });
+  });
+
+  it.each(['', '  '])('fills the blank model "%s" with the new default', (model) => {
+    expect(llmProviderChanges(data('mock', model), 'openai')).toEqual({
+      provider: 'openai',
+      model: 'gpt-6-luna',
+    });
+  });
+
+  it('keeps a model the user chose', () => {
+    expect(llmProviderChanges(data('anthropic', 'claude-opus-5-5'), 'openai')).toEqual({
+      provider: 'openai',
+    });
+    // The default of another provider than the old one is a choice too.
+    expect(llmProviderChanges(data('mock', 'gpt-6-luna'), 'anthropic')).toEqual({
+      provider: 'anthropic',
+    });
+  });
+
+  it('changes only the provider when the model is already the new default', () => {
+    expect(llmProviderChanges(DEFAULTS, 'mock')).toEqual({ provider: 'mock' });
+  });
+});
 
 describe('LLM_CALL_DEFINITION', () => {
   it('starts with the mock provider and model and moderate settings', () => {
@@ -30,10 +126,18 @@ describe('LLM_CALL_DEFINITION', () => {
       'temperature',
       'maxTokens',
     ]);
+  });
+
+  it('labels each provider with whether it needs your API key and says where keys go', () => {
     expect(LLM_CALL_DEFINITION.fields.provider).toEqual({
       label: 'Provider',
-      description: 'The mock provider streams sample text and needs no API key.',
-      optionLabels: { mock: 'Mock (no API key)' },
+      description:
+        'Mock streams sample text. Anthropic and OpenAI use your API key, which is sent only to this app’s own proxy.',
+      optionLabels: {
+        mock: 'Mock (no API key)',
+        anthropic: 'Anthropic (your API key)',
+        openai: 'OpenAI (your API key)',
+      },
     });
   });
 
@@ -61,7 +165,7 @@ describe('LLM_CALL_DATA_SCHEMA', () => {
     for (const provider of LLM_PROVIDERS) {
       expect(LLM_CALL_DATA_SCHEMA.safeParse({ ...DEFAULTS, provider }).success).toBe(true);
     }
-    expect(LLM_CALL_DATA_SCHEMA.safeParse({ ...DEFAULTS, provider: 'openai' }).success).toBe(false);
+    expect(LLM_CALL_DATA_SCHEMA.safeParse({ ...DEFAULTS, provider: 'gemini' }).success).toBe(false);
     const withoutProvider = { model: 'mock', temperature: 0.7, maxTokens: 512 };
     expect(LLM_CALL_DATA_SCHEMA.safeParse(withoutProvider).success).toBe(false);
   });

@@ -12,8 +12,9 @@ import { createEmptyPipeline, type Pipeline, type PipelineEdge } from '../pipeli
 import { SCHEMA_VERSION } from '../schema-version';
 import { validatePipeline } from '../validation/validate-pipeline';
 import { PIPELINE_V1 } from './fixtures/pipeline-v1';
+import { PIPELINE_V2 } from './fixtures/pipeline-v2';
 import type { JsonObject } from './json';
-import type { Migration } from './migrations';
+import { type Migration, MIGRATIONS } from './migrations';
 import {
   type ParsedPipelineFile,
   parsePipelineFile,
@@ -293,13 +294,13 @@ describe('parsePipelineFile', () => {
       'an LLM Call without a provider',
       { nodes: [{ ...LLM, data: { model: 'mock', temperature: 0.7, maxTokens: 512 } }] },
       'nodes[0].data.provider',
-      'Invalid input: expected "mock"',
+      'Invalid option: expected one of "mock"|"anthropic"|"openai"',
     ],
     [
       'a provider the app does not know',
-      { nodes: [{ ...LLM, data: { ...LLM.data, provider: 'openai' } }] },
+      { nodes: [{ ...LLM, data: { ...LLM.data, provider: 'gemini' } }] },
       'nodes[0].data.provider',
-      'Invalid input: expected "mock"',
+      'Invalid option: expected one of "mock"|"anthropic"|"openai"',
     ],
     [
       'an option the kind does not have',
@@ -511,11 +512,11 @@ describe('parsePipelineFile', () => {
 
     it('changes nothing else: saved again, it is the same file with the provider added', () => {
       const { pipeline } = parseOk(PIPELINE_V1);
-      const version2 = PIPELINE_V1.replace('"schemaVersion": 1,', '"schemaVersion": 2,').replace(
-        '"model": "mock",',
-        '"provider": "mock",\n        "model": "mock",',
-      );
-      expect(serializePipeline(pipeline)).toBe(version2);
+      const current = PIPELINE_V1.replace(
+        '"schemaVersion": 1,',
+        `"schemaVersion": ${String(SCHEMA_VERSION)},`,
+      ).replace('"model": "mock",', '"provider": "mock",\n        "model": "mock",');
+      expect(serializePipeline(pipeline)).toBe(current);
     });
 
     it('reads back without a migration once saved in the current version', () => {
@@ -531,6 +532,74 @@ describe('parsePipelineFile', () => {
       expect(validatePipeline(pipeline).issues).toEqual([
         expect.objectContaining({ code: 'invalid-field', nodeId: input?.id, field: 'value' }),
       ]);
+    });
+  });
+
+  // The "Route by sentiment" template with a mock LLM Call, exported by the released version 2 app.
+  describe('a file exported by the version 2 app', () => {
+    it('loads migrated from version 2 without repairs', () => {
+      const { pipeline, migratedFrom, repairs } = parseOk(PIPELINE_V2);
+
+      expect(migratedFrom).toBe(2);
+      expect(repairs).toEqual([]);
+      expect(pipeline.schemaVersion).toBe(SCHEMA_VERSION);
+      expect(pipeline.name).toBe('Route by sentiment');
+      expect(pipeline.nodes.map((node) => node.label)).toEqual([
+        'Review',
+        'Sentiment prompt',
+        'Classifier',
+        'Is positive?',
+        'Positive',
+        'Negative',
+      ]);
+      expect(pipeline.edges).toHaveLength(5);
+    });
+
+    it('keeps the mock provider and the settings of its LLM Call', () => {
+      const { pipeline } = parseOk(PIPELINE_V2);
+      expect(pipeline.nodes.find((node) => node.kind === 'llm-call')?.data).toEqual({
+        provider: 'mock',
+        model: 'mock',
+        temperature: 0,
+        maxTokens: 16,
+      });
+    });
+
+    it('changes nothing: saved again, it is the same file in the current version', () => {
+      const { pipeline } = parseOk(PIPELINE_V2);
+      const current = PIPELINE_V2.replace(
+        '"schemaVersion": 2,',
+        `"schemaVersion": ${String(SCHEMA_VERSION)},`,
+      );
+      expect(serializePipeline(pipeline)).toBe(current);
+    });
+
+    it('reads back without a migration once saved in the current version', () => {
+      const { pipeline } = parseOk(PIPELINE_V2);
+      const saved = parseOk(serializePipeline(pipeline));
+      expect(saved.migratedFrom).toBeNull();
+      expect(saved.pipeline).toEqual(pipeline);
+    });
+
+    it('validates without problems, as it did in version 2', () => {
+      const { pipeline } = parseOk(PIPELINE_V2);
+      expect(validatePipeline(pipeline).issues).toEqual([]);
+    });
+  });
+
+  it('is refused as newer, not as invalid, by a build that knows only version 2', () => {
+    const anthropic = nodeOf('llm-call', 'llm', {
+      provider: 'anthropic',
+      model: 'claude-haiku-5-5',
+      temperature: 0.7,
+      maxTokens: 512,
+    });
+    const text = serializePipeline(pipelineOf([anthropic]));
+    const versionTwoBuild = { migrations: MIGRATIONS.slice(0, 1), currentVersion: 2 };
+
+    expect(parsePipelineFile(text, versionTwoBuild)).toEqual({
+      ok: false,
+      error: { code: 'newer-version', version: 3 },
     });
   });
 

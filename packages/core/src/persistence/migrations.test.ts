@@ -89,13 +89,13 @@ describe('MIGRATIONS', () => {
   });
 });
 
-describe('migration from version 1', () => {
-  function migrationFrom(version: number): Migration {
-    const migration = MIGRATIONS.find((candidate) => candidate.from === version);
-    if (migration === undefined) throw new Error(`No migration from version ${String(version)}`);
-    return migration;
-  }
+function migrationFrom(version: number): Migration {
+  const migration = MIGRATIONS.find((candidate) => candidate.from === version);
+  if (migration === undefined) throw new Error(`No migration from version ${String(version)}`);
+  return migration;
+}
 
+describe('migration from version 1', () => {
   const { migrate } = migrationFrom(1);
 
   const LLM_V1 = {
@@ -168,5 +168,36 @@ describe('migration from version 1', () => {
   ])('leaves %s for the schema to judge', (_, nodes) => {
     const document = version1(nodes);
     expect(migrate(document)).toEqual(document);
+  });
+});
+
+describe('migration from version 2', () => {
+  const { migrate } = migrationFrom(2);
+
+  it('changes nothing, since version 3 only adds providers', () => {
+    const document: JsonObject = {
+      format: 'pipeline-builder',
+      schemaVersion: 2,
+      id: 'p',
+      name: 'Test',
+      nodes: [
+        {
+          id: 'llm',
+          kind: 'llm-call',
+          label: 'LLM Call 1',
+          position: { x: 0, y: 0 },
+          data: { provider: 'mock', model: 'mock', temperature: 0.7, maxTokens: 512 },
+        },
+      ],
+      edges: [],
+    };
+    const copy: unknown = JSON.parse(JSON.stringify(document));
+    expect(migrate(document)).toBe(document);
+    expect(document).toEqual(copy);
+  });
+
+  it('leaves even a malformed document for the schema to judge', () => {
+    const document = { schemaVersion: 2, nodes: 'none' };
+    expect(migrate(document)).toBe(document);
   });
 });

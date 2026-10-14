@@ -11,20 +11,21 @@ Stage A2 ([#20](https://github.com/dr1m11/pipeline-builder/issues/20)) adds the 
 
 Ports have one of four types — `text`, `number`, `json`, `any`. An output may feed an input when the types match or either side is `any`; conversions happen only in Transform nodes. Each kind is described in `packages/core` by a definition (title, description, default data, `getPorts(data)`); ports are derived from node data, not stored.
 
-| Kind        | Data (default)                                                                     | Inputs                                       | Outputs                            |
-| ----------- | ---------------------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------- |
-| `input`     | `valueType` text \| number \| json (`text`), `value`                               | —                                            | `value`: `valueType`               |
-| `prompt`    | `template` (`Answer the question: {{question}}`)                                   | one required `text` input per `{{variable}}` | `prompt`: text                     |
-| `llm-call`  | `provider` mock (`mock`), `model` (`mock`), `temperature` (0.7), `maxTokens` (512) | `prompt`: text (required), `system`: text    | `response`: text                   |
-| `transform` | `operation` parse-json \| stringify \| trim \| get-field, `path`                   | `value`: text / json / text / json           | `result`: json / text / text / any |
-| `condition` | `operator` contains \| equals \| is-empty, `operand`                               | `value`: any (required)                      | `true`: any, `false`: any          |
-| `output`    | `format` text \| markdown (`text`)                                                 | `value`: any (required)                      | —                                  |
+| Kind        | Data (default)                                                                                            | Inputs                                       | Outputs                            |
+| ----------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------- |
+| `input`     | `valueType` text \| number \| json (`text`), `value`                                                      | —                                            | `value`: `valueType`               |
+| `prompt`    | `template` (`Answer the question: {{question}}`)                                                          | one required `text` input per `{{variable}}` | `prompt`: text                     |
+| `llm-call`  | `provider` mock \| anthropic \| openai (`mock`), `model` (`mock`), `temperature` (0.7), `maxTokens` (512) | `prompt`: text (required), `system`: text    | `response`: text                   |
+| `transform` | `operation` parse-json \| stringify \| trim \| get-field, `path`                                          | `value`: text / json / text / json           | `result`: json / text / text / any |
+| `condition` | `operator` contains \| equals \| is-empty, `operand`                                                      | `value`: any (required)                      | `true`: any, `false`: any          |
+| `output`    | `format` text \| markdown (`text`)                                                                        | `value`: any (required)                      | —                                  |
 
 - `PipelineNode` is a discriminated union on `kind`, built from `NodeDataMap`. Every node has a `label`, numbered per kind by default ("Prompt 2"), used in accessible names and error lists.
 - Edges reference ports by id (`sourcePort`, `targetPort`). Port ids are identifiers (`[A-Za-z_][A-Za-z0-9_]*`); Prompt inputs use the variable name, so an edge stays attached while the rest of the template is edited. When a port disappears the edge is kept and validation (A3) reports it.
 - An input accepts one edge; connecting to an occupied input replaces the old edge.
 - The defaults contain an incompatible pair (Transform `parse-json` outputs `json`, LLM Call takes `text`), so type checking is visible before the properties panel exists.
-- `SCHEMA_VERSION` stays `1`: no pipeline has been persisted yet. Version 1 is frozen once autosave or export ship (A4); later shape changes bump it and add a migration. Version 2 added the LLM Call `provider` ([#61](https://github.com/dr1m11/pipeline-builder/issues/61)); [ADR 0010](./0010-pipeline-files-and-schema-migrations.md#migrations) lists every migration.
+- LLM Call providers: `mock` streams sample text and needs no key; `anthropic` and `openai` call the real APIs with the user's own API key, which goes only to the app's proxy. Each provider has a default model (`mock`, `claude-haiku-5-5`, `gpt-6-luna`: small, inexpensive chat models). Switching the provider in the properties form moves a blank model, or the old provider's default, to the new provider's default in the same undo step, and keeps a model the user typed.
+- `SCHEMA_VERSION` stays `1`: no pipeline has been persisted yet. Version 1 is frozen once autosave or export ship (A4); later shape changes bump it and add a migration. Version 2 added the LLM Call `provider` ([#61](https://github.com/dr1m11/pipeline-builder/issues/61)) and version 3 the `anthropic` and `openai` providers ([#78](https://github.com/dr1m11/pipeline-builder/issues/78)); [ADR 0010](./0010-pipeline-files-and-schema-migrations.md#migrations) lists every migration.
 
 ## Consequences
 

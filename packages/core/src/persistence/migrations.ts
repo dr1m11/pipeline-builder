@@ -33,11 +33,21 @@ function withLlmProvider(node: JsonValue): JsonValue {
 }
 
 /**
+ * 2 → 3: LLM Call providers gain `anthropic` and `openai`. Every version 2 document is already a
+ * valid version 3 one, so nothing changes; the version is bumped so that a build that knows only
+ * the mock provider refuses these files as newer instead of as invalid.
+ */
+const ADD_REAL_LLM_PROVIDERS: Migration = {
+  from: 2,
+  migrate: (document) => document,
+};
+
+/**
  * Every migration, one per schema version below `SCHEMA_VERSION`. Append-only: files saved in any
  * earlier version must keep loading, so a migration is never changed or removed once released.
  * Each one is listed in docs/adr/0010-pipeline-files-and-schema-migrations.md.
  */
-export const MIGRATIONS: readonly Migration[] = [ADD_LLM_PROVIDER];
+export const MIGRATIONS: readonly Migration[] = [ADD_LLM_PROVIDER, ADD_REAL_LLM_PROVIDERS];
 
 /**
  * Brings a raw document from `version` up to `target`, one version at a time. A document already at
