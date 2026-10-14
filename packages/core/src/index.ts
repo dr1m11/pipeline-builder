@@ -24,6 +24,12 @@ export {
   validateConnection,
 } from './graph/connections';
 export {
+  extractFragment,
+  instantiateFragment,
+  type InstantiateFragmentOptions,
+  type PipelineElements,
+} from './graph/fragments';
+export {
   addElements,
   addNode,
   findNode,
