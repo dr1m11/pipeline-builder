@@ -9,7 +9,7 @@
 
 **[Live demo](https://pipeline-builder.marat-gabdrashitov17.workers.dev)** · **[Storybook](https://dr1m11.github.io/pipeline-builder/)** · **[Roadmap](docs/roadmap.md)** · **[Architecture decisions](docs/adr/README.md)**
 
-> 🚧 Work in progress. Stages A1 (foundation), A2 (canvas) and A3 (validation and properties) are done; the MVP lands with stage A4. Progress is tracked in [milestones](https://github.com/dr1m11/pipeline-builder/milestones).
+> 🚧 Work in progress. Stages A1–A4 are done, and the MVP is live in the [demo](https://pipeline-builder.marat-gabdrashitov17.workers.dev): build, validate and edit pipelines, with undo, files and autosave. Execution comes next, with stage A5. Progress is tracked in [milestones](https://github.com/dr1m11/pipeline-builder/milestones).
 
 ## Features
 
@@ -21,16 +21,21 @@ Available now:
 - Keyboard and screen-reader support on the canvas: nodes, ports and edges have readable names, and ports connect with Enter
 - Live graph validation: cycles, type mismatches, unconnected inputs, invalid settings and nodes whose result reaches no Output are marked on nodes, ports and edges; edges to a removed template variable stay drawn and reported; a Problems list jumps to the node, edge or field to fix
 - Properties panel generated from each node type's Zod schema (React Hook Form): changes apply as you type, with the same messages as on the canvas
+- Undo / redo of every change, named on the buttons ("Undo Move 3 nodes"); a burst of typing in a field or of nudging nodes is one step
+- Copy, cut, paste and duplicate nodes with the edges between them, also from one browser tab to another
+- Keyboard shortcuts, all listed in a help dialog that opens on `?`
+- Autosave in the browser: the pipeline is restored when you come back
+- JSON import / export with a schema version: files saved by an older version are updated by a chain of migrations (v1 → v2) as they open
+- Three built-in templates and a blank pipeline, from the New menu or the empty canvas
 - Light/dark themes without a flash, desktop-only gate
 - UI kit on Radix primitives and design tokens, documented in Storybook
 - Every pull request gets its own preview deployment
 
-Planned for the MVP (A4):
+Planned (A5 onward):
 
-- Undo / redo, copy / paste, keyboard shortcuts
-- JSON import / export with schema migrations
-
-Later: execution with token streaming over SSE and cancellation (A5), auto-layout in a Web Worker and 500+ nodes at 60 FPS (A6), real-time collaboration with Yjs (A9).
+- Execution: a mock provider that needs no key or your own API key through an SSE proxy, tokens streaming into the nodes, cancellation (A5)
+- Auto-layout in a Web Worker and 500+ nodes at 60 FPS (A6)
+- Real-time collaboration with Yjs (A9)
 
 ## Tech stack
 
@@ -41,10 +46,11 @@ React 19 · TypeScript (strict) · Vite · React Flow · React Hook Form · Zod 
 ```
 apps/web/              React SPA, Feature-Sliced Design (checked by Steiger)
   src/app/             composition root: error handling, device support, theme, global styles
-  src/pages/           editor page
+  src/pages/           editor page, autosave
   src/widgets/         pipeline canvas, inspector
-  src/features/        user actions (add-node, edit-node-properties, review-problems, toggle-theme)
-  src/entities/        pipeline store, node cards
+  src/features/        user actions (add-node, edit-node-properties, edit-selection, undo-redo,
+                       import-export, load-template, review-problems, show-shortcuts, toggle-theme)
+  src/entities/        pipeline store with the undo history, node cards
   src/shared/          UI kit, helpers, config
 packages/core/         framework-free domain: graph model, validation, engine, undo, migrations
 docs/adr/              architecture decision records
@@ -54,6 +60,8 @@ docs/adr/              architecture decision records
 - **Framework-free core.** Domain logic lives in `packages/core`, which cannot import React or browser APIs (lint rule plus a tsconfig without the DOM lib) and has its own 80% coverage gate. See [ADR 0001](docs/adr/0001-monorepo-with-fsd-app-and-framework-free-core.md).
 - **One source of truth for the graph.** The core `Pipeline` document lives in a zustand store and changes only through pure core operations; React Flow is a controlled view of it, and a drag reaches the document once, on drop. See [ADR 0006](docs/adr/0006-canvas-state-core-document-and-react-flow-view.md).
 - **Typed ports.** Every node kind declares its ports in core, and one rule decides which ports may connect. The canvas checks it while you connect and again before it adds an edge. See [ADR 0005](docs/adr/0005-node-catalogue-and-typed-ports.md).
+- **Undo through commands.** Every change to the document is a typed core command, and the history keeps the document before and after each one. Snapshots are cheap because untouched nodes stay the same objects; bursts such as typing merge into one step. See [ADR 0009](docs/adr/0009-undo-redo-commands-with-snapshot-history.md).
+- **Versioned pipeline files.** Export, import, autosave and the clipboard share one JSON format with a schema version and one parser: files from older versions pass through a chain of migrations, are checked with Zod, and connections the editor cannot keep are dropped and reported. See [ADR 0010](docs/adr/0010-pipeline-files-and-schema-migrations.md).
 - **One set of rules for forms and validation.** Each node kind describes its data with Zod schemas in core; the properties form and graph validation check the same rules, so the form and the canvas always agree. See [ADR 0007](docs/adr/0007-zod-schemas-for-node-data-in-core.md) and [ADR 0008](docs/adr/0008-graph-validation.md).
 - **Design tokens** as CSS variables exposed through Tailwind utilities; components never use raw colours. See [ADR 0004](docs/adr/0004-ui-stack-radix-and-tailwind.md).
 - **Hosting** on Cloudflare Workers static assets, with the SSE proxy and collaboration backend planned on the same platform. See [ADR 0003](docs/adr/0003-hosting-on-cloudflare-workers.md).
