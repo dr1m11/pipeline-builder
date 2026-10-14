@@ -2,7 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     // Workers runtime and binding types come from `wrangler types` (worker-configuration.d.ts),
-    // not from the DOM lib or Node: code here runs on workerd. Regenerate with `pnpm cf-typegen`.
+    // not from the DOM lib or Node: code here runs on workerd. Generated on install and before
+    // typecheck, not committed; regenerate with `pnpm cf-typegen` after editing wrangler.jsonc.
     "lib": ["ES2023"],
     "types": ["./worker-configuration.d.ts"],
     "exactOptionalPropertyTypes": true

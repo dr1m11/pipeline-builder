@@ -7,8 +7,9 @@
   "type": "module",
   "scripts": {
     "dev": "node -e \"process.getBuiltinModule('node:fs').mkdirSync('../web/dist', { recursive: true })\" && wrangler dev",
+    "postinstall": "wrangler types",
     "cf-typegen": "wrangler types",
-    "typecheck": "wrangler types --check && tsc -p tsconfig.json"
+    "typecheck": "wrangler types && tsc -p tsconfig.json"
   },
   "dependencies": {
     "@pipeline-builder/core": "workspace:*",
