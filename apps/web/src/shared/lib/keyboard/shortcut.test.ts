@@ -98,6 +98,14 @@ describe('formatShortcut', () => {
     expect(formatShortcut('Shift+ArrowUp', false)).toEqual(['Shift', '↑']);
     expect(formatShortcut('Delete', true)).toEqual(['Delete']);
   });
+
+  it('shows the gestures and key sets of the help as they are written', () => {
+    expect(formatShortcut('Mod+Click', true)).toEqual(['⌘', 'Click']);
+    expect(formatShortcut('Mod+Click', false)).toEqual(['Ctrl', 'Click']);
+    expect(formatShortcut('Shift+Drag', false)).toEqual(['Shift', 'Drag']);
+    expect(formatShortcut('Shift+Arrow keys', true)).toEqual(['⇧', 'Arrow keys']);
+    expect(formatShortcut('Scroll', false)).toEqual(['Scroll']);
+  });
 });
 
 describe('shortcutKeys', () => {

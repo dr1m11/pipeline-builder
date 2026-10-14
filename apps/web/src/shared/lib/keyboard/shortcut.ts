@@ -1,6 +1,8 @@
 // A shortcut is written as modifiers and a key joined by `+`: 'Mod+Z', 'Mod+Shift+Z', 'Ctrl+Y',
 // '?', 'Escape'. `Mod` is ⌘ on Apple platforms and Ctrl elsewhere; `Ctrl`, `Meta`, `Alt` and
-// `Shift` mean the same key everywhere. The key is a character or a `KeyboardEvent.key` name.
+// `Shift` mean the same key everywhere. The key is a character or a `KeyboardEvent.key` name. A
+// shortcut that is only listed in the help may name a gesture or a set of keys instead, shown as
+// written: 'Shift+Drag', 'Mod+Click', 'Arrow keys'.
 
 /** A shortcut of the app, described for the keyboard shortcuts help. */
 export interface ShortcutDescriptor {
