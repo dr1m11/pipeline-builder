@@ -34,6 +34,8 @@ test.describe('templates', () => {
     for (const name of ['Question', 'Answer prompt', 'Model', 'Answer']) {
       await expectWholeCard(name);
     }
+    // The button left with the hint, so focus moves to the canvas instead of the page.
+    await expect(node('Question')).toBeFocused();
     await expect(node('Question value to Answer prompt question')).toBeAttached();
     await expect(node('Model response to Answer value')).toBeAttached();
     await expect(inspector.getByRole('button', { name: 'Problems: none' })).toBeVisible();

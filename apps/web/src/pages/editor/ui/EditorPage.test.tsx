@@ -413,6 +413,11 @@ describe('EditorPage templates', () => {
     expect(
       screen.getByRole('button', { name: 'Undo Load template “Ask a question”' }),
     ).toBeEnabled();
+    // The button left with the hint; focus goes on from the canvas, not from the top of the page.
+    await waitFor(() => {
+      expect(screen.getByRole('group', { name: 'Question' })).toHaveFocus();
+    });
+    expect(document.body).not.toHaveFocus();
   });
 
   it('replaces the pipeline from the New menu first in the File toolbar', async () => {
