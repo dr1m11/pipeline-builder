@@ -10,12 +10,31 @@ import {
   mockCompletion,
   parseLlmStreamEvent,
 } from '@pipeline-builder/core';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { type AppOptions, createApp } from './app';
 import type { Bindings } from './bindings';
-import { MAX_REQUEST_BYTES } from './llm-stream';
+import { HEARTBEAT_INTERVAL_MS, MAX_REQUEST_BYTES } from './llm-stream';
+import { createAnthropicProvider } from './providers/anthropic-provider';
+import {
+  ANTHROPIC_ANSWER,
+  ANTHROPIC_ANSWER_TEXT,
+  ANTHROPIC_ERROR_BODIES,
+  ANTHROPIC_OVERLOADED_MIDWAY,
+} from './providers/fixtures/anthropic-streams';
+import {
+  createFakeUpstream,
+  type FakeAnswer,
+  TEST_API_KEY,
+} from './providers/fixtures/fake-upstream';
+import {
+  OPENAI_ANSWER,
+  OPENAI_ANSWER_TEXT,
+  OPENAI_ERROR_BODIES,
+  OPENAI_ERROR_EVENT,
+} from './providers/fixtures/openai-streams';
 import { createMockProvider } from './providers/mock-provider';
+import { createOpenAiProvider } from './providers/openai-provider';
 import type { Provider } from './providers/provider';
 
 const REQUEST: LlmRequest = {
@@ -29,7 +48,7 @@ const REQUEST: LlmRequest = {
 const REAL_REQUEST: LlmRequest = { ...REQUEST, provider: 'anthropic', model: 'claude-haiku-5-5' };
 
 const CLIENT_IP = '203.0.113.7';
-const API_KEY = 'sk-test-secret';
+const API_KEY = TEST_API_KEY;
 
 const MOCK_ONLY: AppOptions = { providers: { mock: createMockProvider({ tokenDelayMs: 0 }) } };
 
@@ -55,7 +74,8 @@ function createEnv({ llmLimit = true, realProviderLimit = true } = {}) {
 interface PostOptions {
   readonly options?: AppOptions;
   readonly env?: Bindings;
-  readonly headers?: Readonly<Record<string, string>>;
+  /** Headers to add or replace; one set to `undefined` is not sent. */
+  readonly headers?: Readonly<Record<string, string | undefined>>;
 }
 
 /** Posts `body` (JSON unless it is a string) to the stream endpoint, as a browser on `CLIENT_IP`. */
@@ -63,16 +83,20 @@ function postStream(
   body: unknown,
   { options = MOCK_ONLY, env = createEnv(), headers }: PostOptions = {},
 ) {
+  const allHeaders: Readonly<Record<string, string | undefined>> = {
+    'Content-Type': 'application/json',
+    'CF-Connecting-IP': CLIENT_IP,
+    Authorization: `Bearer ${API_KEY}`,
+    ...headers,
+  };
+  const sent = Object.entries(allHeaders).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined,
+  );
   return createApp(options).request(
     '/api/llm/stream',
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'CF-Connecting-IP': CLIENT_IP,
-        Authorization: `Bearer ${API_KEY}`,
-        ...headers,
-      },
+      headers: sent,
       body: typeof body === 'string' ? body : JSON.stringify(body),
     },
     env,
@@ -111,6 +135,12 @@ function bodyReader(response: Response) {
   return response.body.getReader();
 }
 
+/** Reads the body of `response` as text, chunk by chunk. */
+function textReader(response: Response) {
+  if (response.body === null) throw new Error('The response has no body');
+  return response.body.pipeThrough(new TextDecoderStream()).getReader();
+}
+
 describe('GET /api/health', () => {
   it('answers that the proxy is up', async () => {
     const response = await createApp(MOCK_ONLY).request('/api/health', {}, createEnv());
@@ -137,7 +167,7 @@ describe('POST /api/llm/stream', () => {
   });
 
   it.each(['anthropic', 'openai'] as const)(
-    'answers the %s provider, which it does not have yet, with an error event',
+    'answers the %s provider, when the app has none, with an error event',
     async (provider) => {
       const response = await postStream({ ...REAL_REQUEST, provider });
 
@@ -147,7 +177,7 @@ describe('POST /api/llm/stream', () => {
         {
           type: 'error',
           code: 'bad-request',
-          message: `${LLM_PROVIDER_INFO[provider].title} is not available yet`,
+          message: `${LLM_PROVIDER_INFO[provider].title} is not available`,
         },
       ]);
     },
@@ -377,6 +407,186 @@ describe('POST /api/llm/stream', () => {
     });
   });
 });
+
+describe('API keys', () => {
+  it.each([
+    ['anthropic', 'no Authorization header', undefined],
+    ['openai', 'an empty Authorization header', ''],
+    ['anthropic', 'a blank bearer token', 'Bearer   '],
+    ['openai', 'another scheme', `Basic ${API_KEY}`],
+    ['anthropic', 'a bare key', API_KEY],
+  ] as const)(
+    'answers a request to %s with %s with 401 invalid-key, before the stricter limit',
+    async (provider, _case, authorization) => {
+      const env = createEnv();
+      const real = fakeProvider(['Hi']);
+      const stream = vi.spyOn(real, 'stream');
+
+      const response = await postStream(
+        { ...REAL_REQUEST, provider },
+        {
+          options: { providers: { [provider]: real } },
+          env,
+          headers: { Authorization: authorization },
+        },
+      );
+
+      expect(response.status).toBe(401);
+      expect(await readError(response)).toEqual({
+        code: 'invalid-key',
+        message: `${LLM_PROVIDER_INFO[provider].title} needs your API key. Add it and try again.`,
+      });
+      expect(stream).not.toHaveBeenCalled();
+      expect(env.REAL_PROVIDER_RATE_LIMITER.limit).not.toHaveBeenCalled();
+    },
+  );
+
+  it('gives the provider the bearer token, whatever the case of the scheme and the spaces', async () => {
+    const anthropic = fakeProvider(['Hi']);
+    const stream = vi.spyOn(anthropic, 'stream');
+
+    const response = await postStream(REAL_REQUEST, {
+      options: { providers: { anthropic } },
+      headers: { Authorization: `  bearer   ${API_KEY}  ` },
+    });
+
+    expect(await readEvents(response)).toEqual([{ type: 'token', text: 'Hi' }, { type: 'done' }]);
+    expect(stream).toHaveBeenCalledExactlyOnceWith(
+      REAL_REQUEST,
+      expect.objectContaining({ apiKey: API_KEY }),
+    );
+  });
+
+  it('gives the mock no key, even when the client sends one', async () => {
+    const mock = fakeProvider(['Hi']);
+    const stream = vi.spyOn(mock, 'stream');
+
+    await (await postStream(REQUEST, { options: { providers: { mock } } })).text();
+
+    expect(stream).toHaveBeenCalledOnce();
+    expect(stream.mock.calls[0]?.[1]).not.toHaveProperty('apiKey');
+  });
+});
+
+describe('heartbeat', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('writes a comment every 15 seconds while the provider is quiet, and stops at the end', async () => {
+    vi.useFakeTimers();
+    let answer: () => void = () => undefined;
+    const thinking = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    const slow: Provider = {
+      async *stream() {
+        await thinking;
+        yield 'Hi';
+      },
+    };
+    const reader = textReader(
+      await postStream(REQUEST, { options: { providers: { mock: slow } } }),
+    );
+
+    const first = reader.read();
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS);
+    expect(HEARTBEAT_INTERVAL_MS).toBe(15_000);
+    expect((await first).value).toBe(': ping\n\n');
+
+    answer();
+    let rest = '';
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+      rest += chunk.value;
+    }
+    expect(createSseParser().push(rest)).toEqual([
+      { event: 'token', data: '{"text":"Hi"}', id: '' },
+      { event: 'done', data: '{}', id: '' },
+    ]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('real providers', () => {
+  /** An app whose Anthropic and OpenAI providers call a fake upstream that answers with `answer`. */
+  function realProviders(answer: FakeAnswer | typeof fetch): AppOptions {
+    const send = typeof answer === 'function' ? answer : createFakeUpstream(answer).fetch;
+    return {
+      providers: {
+        anthropic: createAnthropicProvider({ fetch: send }),
+        openai: createOpenAiProvider({ fetch: send }),
+      },
+    };
+  }
+
+  it.each([
+    ['anthropic', ANTHROPIC_ANSWER, ANTHROPIC_ANSWER_TEXT],
+    ['openai', OPENAI_ANSWER, OPENAI_ANSWER_TEXT],
+  ] as const)('stream the answer of %s as tokens, then done', async (provider, body, text) => {
+    const response = await postStream(
+      { ...REAL_REQUEST, provider },
+      { options: realProviders({ body: [body] }) },
+    );
+
+    const events = await readEvents(response);
+    expect(events.at(-1)).toEqual({ type: 'done' });
+    expect(events.map((event) => (event.type === 'token' ? event.text : '')).join('')).toBe(text);
+  });
+
+  it.each([
+    ['anthropic', { status: 401, body: [ANTHROPIC_ERROR_BODIES[401]] }, 'invalid-key'],
+    ['openai', { status: 429, body: [OPENAI_ERROR_BODIES[429]] }, 'rate-limited'],
+    ['anthropic', { body: [ANTHROPIC_OVERLOADED_MIDWAY] }, 'upstream-error'],
+  ] as const)(
+    'end the stream of %s with an error event when it fails',
+    async (provider, answer, code) => {
+      const response = await postStream(
+        { ...REAL_REQUEST, provider },
+        { options: realProviders(answer) },
+      );
+
+      expect(response.status).toBe(200);
+      expect((await readEvents(response)).at(-1)).toMatchObject({ type: 'error', code });
+    },
+  );
+
+  it('never put the key in a response or a log line, whatever happens upstream', async () => {
+    const methods = ['debug', 'error', 'info', 'log', 'trace', 'warn'] as const;
+    const consoleSpies = methods.map((method) =>
+      vi.spyOn(console, method).mockImplementation(() => undefined),
+    );
+    const networkFailure: typeof fetch = () =>
+      Promise.reject(new TypeError(`connect ECONNREFUSED with ${API_KEY}`));
+    const cases = [
+      ['anthropic', realProviders({ body: [ANTHROPIC_ANSWER] })],
+      ['anthropic', realProviders({ status: 401, body: [ANTHROPIC_ERROR_BODIES[401]] })],
+      ['openai', realProviders({ status: 401, body: [OPENAI_ERROR_BODIES[401]] })],
+      ['openai', realProviders({ body: [OPENAI_ERROR_EVENT] })],
+      ['openai', realProviders({ body: [OPENAI_ANSWER.slice(0, 900)], after: 'break' })],
+      ['anthropic', realProviders(networkFailure)],
+    ] as const;
+
+    const sent: string[] = [];
+    for (const [provider, options] of cases) {
+      const response = await postStream({ ...REAL_REQUEST, provider }, { options });
+      sent.push(JSON.stringify([...response.headers]), await response.text());
+    }
+    const logged = consoleSpies.flatMap((spy) => spy.mock.calls.flat().map(describeLogged));
+    consoleSpies.forEach((spy) => {
+      spy.mockRestore();
+    });
+
+    expect(sent.join('\n')).toContain('event: done');
+    expect(sent.join('\n')).not.toContain(API_KEY);
+    expect(logged.join('\n')).not.toContain(API_KEY);
+  });
+});
+
+/** A logged value as text, with the message and stack of an error. */
+function describeLogged(value: unknown): string {
+  if (value instanceof Error) return `${value.name}: ${value.message}\n${value.stack ?? ''}`;
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
 
 describe('API responses', () => {
   it.each([

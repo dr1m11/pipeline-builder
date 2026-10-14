@@ -2,7 +2,7 @@ import type { LlmErrorCode, LlmErrorResponse } from '@pipeline-builder/core';
 import type { Context } from 'hono';
 
 /** HTTP statuses of the API's error responses. */
-export type ApiErrorStatus = 400 | 404 | 413 | 429 | 500;
+export type ApiErrorStatus = 400 | 401 | 404 | 413 | 429 | 500;
 
 /**
  * An API error that happens before any streaming starts, with the body every such error has: an
