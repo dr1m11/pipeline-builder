@@ -9,11 +9,6 @@ export interface ProviderContext {
 /** A source of model answers the stream endpoint can use. */
 export interface Provider {
   /**
-   * Whether the provider calls a real model with the user's key. Requests to it also take from
-   * the stricter `REAL_PROVIDER_RATE_LIMITER`.
-   */
-  readonly real: boolean;
-  /**
    * Streams the answer to `request` as text chunks, in order. Throws `LlmError` when the provider
    * fails; any other error is reported as `upstream-error`. Stops early, by ending or by throwing,
    * once `context.signal` aborts.

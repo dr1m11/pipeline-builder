@@ -1,6 +1,8 @@
 import {
   err,
   formatLlmStreamEvent,
+  LLM_PROMPT_MAX_LENGTH,
+  LLM_PROVIDER_INFO,
   LLM_REQUEST_SCHEMA,
   LlmError,
   type LlmRequest,
@@ -19,22 +21,29 @@ import type { Provider, Providers } from './providers/provider';
 type AppContext = Context<{ Bindings: Bindings }>;
 
 /**
- * Largest request body the stream endpoint reads, in bytes: room for a prompt and a system prompt
- * of 100 000 characters each, even in scripts that take several bytes per character.
+ * Largest request body the stream endpoint reads, in bytes: a prompt and a system prompt of
+ * `LLM_PROMPT_MAX_LENGTH` characters each at 4 bytes per character (UTF-8 takes at most 3 for a
+ * character of the Basic Multilingual Plane), and room for the other fields.
  */
-export const MAX_REQUEST_BYTES = 1024 * 1024;
+export const MAX_REQUEST_BYTES = 2 * LLM_PROMPT_MAX_LENGTH * 4 + 64 * 1024;
 
 /** Answers 413 to a body larger than `MAX_REQUEST_BYTES`, before anything parses it. */
 export const limitRequestBody = bodyLimit({
   maxSize: MAX_REQUEST_BYTES,
-  onError: (c) => apiError(c, 413, 'bad-request', 'The request body is larger than 1 MB'),
+  onError: (c) =>
+    apiError(
+      c,
+      413,
+      'bad-request',
+      `The request body is larger than ${String(Math.floor(MAX_REQUEST_BYTES / 1024))} KB`,
+    ),
 });
 
 /**
  * Handles `POST /api/llm/stream`. It checks the rate limits and the body, an `LlmRequest` as JSON,
  * and answers a failed check with a JSON error (400 or 429). Then it streams the provider's answer
- * as SSE `LlmStreamEvent`s, which always end with `done` or `error` unless the client disconnects;
- * a disconnect stops the provider.
+ * as SSE `LlmStreamEvent`s (`Content-Type: text/event-stream`), which always end with `done` or
+ * `error` unless the client disconnects; a disconnect stops the provider.
  */
 export function createLlmStreamHandler(providers: Providers) {
   return async (c: AppContext): Promise<Response> => {
@@ -44,14 +53,13 @@ export function createLlmStreamHandler(providers: Providers) {
     const request = await readLlmRequest(c);
     if (!request.ok) return apiError(c, 400, 'bad-request', request.error);
 
-    const provider = providers[request.value.provider];
-    if (
-      provider?.real === true &&
-      !(await c.env.REAL_PROVIDER_RATE_LIMITER.limit({ key: client })).success
-    ) {
+    // A provider that needs the user's key calls a real model: it gets the stricter limit too.
+    const { needsApiKey } = LLM_PROVIDER_INFO[request.value.provider];
+    if (needsApiKey && !(await c.env.REAL_PROVIDER_RATE_LIMITER.limit({ key: client })).success) {
       return rateLimited(c);
     }
 
+    const provider = providers[request.value.provider];
     return streamSSE(c, async (stream) => {
       const disconnect = new AbortController();
       stream.onAbort(() => {
@@ -108,11 +116,8 @@ async function* answerEvents(
   signal: AbortSignal,
 ): AsyncGenerator<LlmStreamEvent, void, undefined> {
   if (provider === undefined) {
-    yield {
-      type: 'error',
-      code: 'bad-request',
-      message: `The "${request.provider}" provider is not available yet`,
-    };
+    const { title } = LLM_PROVIDER_INFO[request.provider];
+    yield { type: 'error', code: 'bad-request', message: `${title} is not available yet` };
     return;
   }
 

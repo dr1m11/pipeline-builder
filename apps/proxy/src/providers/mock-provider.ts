@@ -13,7 +13,6 @@ export interface MockProviderOptions {
  */
 export function createMockProvider({ tokenDelayMs }: MockProviderOptions): Provider {
   return {
-    real: false,
     async *stream(request, { signal }) {
       for (const token of splitIntoTokens(mockCompletion(request))) {
         await pause(tokenDelayMs, signal);

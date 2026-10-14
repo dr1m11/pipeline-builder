@@ -1,6 +1,10 @@
 import {
   createSseParser,
+  LLM_ERROR_RESPONSE_SCHEMA,
+  LLM_PROMPT_MAX_LENGTH,
+  LLM_PROVIDER_INFO,
   LlmError,
+  type LlmErrorResponse,
   type LlmRequest,
   type LlmStreamEvent,
   mockCompletion,
@@ -21,6 +25,8 @@ const REQUEST: LlmRequest = {
   temperature: 0.7,
   maxTokens: 512,
 };
+
+const REAL_REQUEST: LlmRequest = { ...REQUEST, provider: 'anthropic', model: 'claude-haiku-5-5' };
 
 const CLIENT_IP = '203.0.113.7';
 const API_KEY = 'sk-test-secret';
@@ -84,10 +90,14 @@ async function readEvents(response: Response): Promise<LlmStreamEvent[]> {
   });
 }
 
+/** Reads an error response the way the web client does. */
+async function readError(response: Response): Promise<LlmErrorResponse['error']> {
+  return LLM_ERROR_RESPONSE_SCHEMA.parse(await response.json()).error;
+}
+
 /** A provider that streams `chunks` at once, then throws `error` if there is one. */
 function fakeProvider(chunks: readonly string[], error?: Error): Provider {
   return {
-    real: false,
     // eslint-disable-next-line @typescript-eslint/require-await -- the fake has nothing to wait for
     async *stream() {
       yield* chunks;
@@ -115,7 +125,7 @@ describe('POST /api/llm/stream', () => {
     const response = await postStream(REQUEST);
 
     expect(response.status).toBe(200);
-    expect(response.headers.get('Content-Type')).toMatch(/^text\/event-stream/);
+    expect(response.headers.get('Content-Type')).toBe('text/event-stream');
     const events = await readEvents(response);
     const tokens = events.slice(0, -1);
     expect(tokens.length).toBeGreaterThan(1);
@@ -126,14 +136,22 @@ describe('POST /api/llm/stream', () => {
     expect(events.at(-1)).toEqual({ type: 'done' });
   });
 
-  it('answers a provider it does not have with an error event', async () => {
-    const response = await postStream(REQUEST, { options: { providers: {} } });
+  it.each(['anthropic', 'openai'] as const)(
+    'answers the %s provider, which it does not have yet, with an error event',
+    async (provider) => {
+      const response = await postStream({ ...REAL_REQUEST, provider });
 
-    expect(response.status).toBe(200);
-    expect(await readEvents(response)).toEqual([
-      { type: 'error', code: 'bad-request', message: 'The "mock" provider is not available yet' },
-    ]);
-  });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('text/event-stream');
+      expect(await readEvents(response)).toEqual([
+        {
+          type: 'error',
+          code: 'bad-request',
+          message: `${LLM_PROVIDER_INFO[provider].title} is not available yet`,
+        },
+      ]);
+    },
+  );
 
   it('ends with an error event when the provider fails midway', async () => {
     const provider = fakeProvider(['Hello'], new LlmError('timeout', 'The provider is slow'));
@@ -172,7 +190,6 @@ describe('POST /api/llm/stream', () => {
       reportStop = resolve;
     });
     const endless: Provider = {
-      real: false,
       async *stream(_request, { signal }) {
         try {
           while (!signal.aborted) {
@@ -200,26 +217,29 @@ describe('POST /api/llm/stream', () => {
       ['a body that is not JSON', '{"provider":', 'The request body is not valid JSON'],
       ['a body that is not an object', [], 'The request is invalid ('],
       ['a blank prompt', { ...REQUEST, prompt: '  ' }, 'prompt: Required'],
+      [
+        'a system prompt that is too long',
+        { ...REQUEST, system: 'x'.repeat(LLM_PROMPT_MAX_LENGTH + 1) },
+        'system: Must be at most',
+      ],
       ['an unknown provider', { ...REQUEST, provider: 'acme' }, 'provider: '],
       ['too many tokens', { ...REQUEST, maxTokens: 1e6 }, 'maxTokens: '],
     ])('answers 400 to %s', async (_case, body, message) => {
       const response = await postStream(body);
 
       expect(response.status).toBe(400);
-      const json = await response.json();
-      expect(json).toHaveProperty('error.code', 'bad-request');
-      expect(json).toHaveProperty('error.message', expect.stringContaining(message));
+      const error = await readError(response);
+      expect(error.code).toBe('bad-request');
+      expect(error.message).toContain(message);
     });
 
     it('answers 400 to a body sent as anything but JSON', async () => {
       const response = await postStream(REQUEST, { headers: { 'Content-Type': 'text/plain' } });
 
       expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
-        error: {
-          code: 'bad-request',
-          message: 'The request body must be JSON (Content-Type: application/json)',
-        },
+      expect(await readError(response)).toEqual({
+        code: 'bad-request',
+        message: 'The request body must be JSON (Content-Type: application/json)',
       });
     });
 
@@ -237,13 +257,15 @@ describe('POST /api/llm/stream', () => {
       const response = await postStream({ ...REQUEST, prompt });
 
       expect(response.status).toBe(413);
-      expect(await response.json()).toEqual({
-        error: { code: 'bad-request', message: 'The request body is larger than 1 MB' },
+      expect(await readError(response)).toEqual({
+        code: 'bad-request',
+        message: 'The request body is larger than 845 KB',
       });
     });
 
-    it('accepts a prompt and a system prompt of 100 000 characters each in any script', async () => {
-      const long = 'ж'.repeat(100_000);
+    it('accepts a prompt and a system prompt of the longest length, in any script', async () => {
+      // Three bytes per character in UTF-8.
+      const long = '中'.repeat(LLM_PROMPT_MAX_LENGTH);
 
       const response = await postStream(
         { ...REQUEST, prompt: long, system: long },
@@ -277,34 +299,40 @@ describe('POST /api/llm/stream', () => {
       });
 
       expect(response.status).toBe(429);
-      expect(await response.json()).toEqual({
-        error: { code: 'rate-limited', message: 'Too many requests. Wait a minute and try again.' },
+      expect(await readError(response)).toEqual({
+        code: 'rate-limited',
+        message: 'Too many requests. Wait a minute and try again.',
       });
       expect(stream).not.toHaveBeenCalled();
     });
 
-    it('also counts requests to a real model against the stricter limit', async () => {
-      const real: Provider = { ...createMockProvider({ tokenDelayMs: 0 }), real: true };
+    it('also counts requests to a provider that needs a key against the stricter limit', async () => {
       const env = createEnv();
 
-      const response = await postStream(REQUEST, { options: { providers: { mock: real } }, env });
+      const response = await postStream(REAL_REQUEST, {
+        options: { providers: { anthropic: fakeProvider(['Hi']) } },
+        env,
+      });
 
-      expect((await readEvents(response)).at(-1)).toEqual({ type: 'done' });
+      expect(await readEvents(response)).toEqual([{ type: 'token', text: 'Hi' }, { type: 'done' }]);
+      expect(env.LLM_RATE_LIMITER.limit).toHaveBeenCalledExactlyOnceWith({ key: CLIENT_IP });
       expect(env.REAL_PROVIDER_RATE_LIMITER.limit).toHaveBeenCalledExactlyOnceWith({
         key: CLIENT_IP,
       });
     });
 
-    it('answers 429 once the stricter limit for real models is reached', async () => {
-      const real: Provider = { ...createMockProvider({ tokenDelayMs: 0 }), real: true };
+    it('answers 429 once the stricter limit is reached', async () => {
+      const anthropic = fakeProvider(['Hi']);
+      const stream = vi.spyOn(anthropic, 'stream');
 
-      const response = await postStream(REQUEST, {
-        options: { providers: { mock: real } },
+      const response = await postStream(REAL_REQUEST, {
+        options: { providers: { anthropic } },
         env: createEnv({ realProviderLimit: false }),
       });
 
       expect(response.status).toBe(429);
-      expect(await response.json()).toMatchObject({ error: { code: 'rate-limited' } });
+      expect((await readError(response)).code).toBe('rate-limited');
+      expect(stream).not.toHaveBeenCalled();
     });
 
     it('shares one key between requests that come without a client IP', async () => {
@@ -354,8 +382,9 @@ describe('API responses', () => {
     const response = await createApp(MOCK_ONLY).request(path, { method }, createEnv());
 
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({
-      error: { code: 'bad-request', message: 'There is no such API endpoint' },
+    expect(await readError(response)).toEqual({
+      code: 'bad-request',
+      message: 'There is no such API endpoint',
     });
   });
 
@@ -367,8 +396,9 @@ describe('API responses', () => {
     const response = await postStream(REQUEST, { env });
 
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      error: { code: 'upstream-error', message: 'The proxy failed to handle the request' },
+    expect(await readError(response)).toEqual({
+      code: 'upstream-error',
+      message: 'The proxy failed to handle the request',
     });
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(consoleError).toHaveBeenCalledExactlyOnceWith('Unhandled Error in POST /api/llm/stream');

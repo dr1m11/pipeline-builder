@@ -24,14 +24,13 @@ afterEach(() => {
 });
 
 describe('createMockProvider', () => {
-  it('streams the mock completion word by word and needs no real model', async () => {
+  it('streams the mock completion word by word', async () => {
     const provider = createMockProvider({ tokenDelayMs: 0 });
 
     const tokens = await collect(
       provider.stream(REQUEST, { signal: new AbortController().signal }),
     );
 
-    expect(provider.real).toBe(false);
     expect(tokens.length).toBeGreaterThan(1);
     expect(tokens).toEqual(TOKENS);
   });
