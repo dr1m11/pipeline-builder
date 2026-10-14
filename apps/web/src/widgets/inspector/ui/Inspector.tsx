@@ -1,9 +1,4 @@
-import {
-  EMPTY_ISSUES,
-  findNode,
-  NODE_DEFINITIONS,
-  type PipelineNode,
-} from '@pipeline-builder/core';
+import { EMPTY_ISSUES, NODE_DEFINITIONS, type PipelineNode } from '@pipeline-builder/core';
 import { useCallback, useId, useState } from 'react';
 
 import { NodeKindIcon } from '@/entities/node';
@@ -11,11 +6,14 @@ import { usePipelineStore, useValidationReport } from '@/entities/pipeline';
 import { NodeProperties } from '@/features/edit-node-properties';
 import { type FieldRevealRequest, ProblemList } from '@/features/review-problems';
 
+import { useSelectedNode } from '../model/use-selected-node';
 import { ProblemsSection } from './ProblemsSection';
+import { RunOutputSection } from './RunOutputSection';
 
 /**
- * The editor's right sidebar: the properties of the selected node and the problems of the
- * pipeline. Picking a field problem selects its node and focuses the field in the form.
+ * The editor's right sidebar: the properties of the selected node, what the current run did to it,
+ * and the problems of the pipeline. Picking a field problem selects its node and focuses the field
+ * in the form. Needs the pipeline and run stores above it.
  */
 export function Inspector() {
   // A field to focus once its node's form is shown; cleared as soon as it has been focused, so
@@ -28,6 +26,7 @@ export function Inspector() {
   return (
     <div className="flex flex-col">
       <PropertiesSection fieldRequest={fieldRequest} onFieldFocused={clearFieldRequest} />
+      <RunOutputSection />
       <ProblemsSection onRevealField={setFieldRequest} />
     </div>
   );
@@ -41,12 +40,7 @@ interface PropertiesSectionProps {
 function PropertiesSection({ fieldRequest, onFieldFocused }: PropertiesSectionProps) {
   const headingId = useId();
   const selectedCount = usePipelineStore((state) => state.selectedNodeIds.size);
-  // The node object is stable while it is unchanged, so this re-renders only when it changes.
-  const node = usePipelineStore((state) => {
-    if (state.selectedNodeIds.size !== 1) return undefined;
-    const [id] = state.selectedNodeIds;
-    return id === undefined ? undefined : findNode(state.pipeline, id);
-  });
+  const node = useSelectedNode();
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3 p-3">
