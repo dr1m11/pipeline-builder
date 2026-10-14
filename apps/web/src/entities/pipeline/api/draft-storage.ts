@@ -1,0 +1,98 @@
+import {
+  err,
+  ok,
+  type ParsedPipelineFile,
+  parsePipelineFile,
+  type Pipeline,
+  type PipelineFileError,
+  type Result,
+  serializePipeline,
+} from '@pipeline-builder/core';
+
+/** Where the draft is kept: the pipeline being edited, as the text of a pipeline file. */
+export const DRAFT_STORAGE_KEY = 'pb:pipeline';
+/** Where a draft that cannot be read is moved, so that the next save does not erase it. */
+export const UNREADABLE_DRAFT_STORAGE_KEY = 'pb:pipeline:unreadable';
+
+/** What was found under the draft key. */
+export type DraftLoadResult =
+  /** Nothing is saved, or the browser does not give access to storage. */
+  | { readonly status: 'empty' }
+  /** The saved pipeline, with what was done to load it (see `parsePipelineFile`). */
+  | ({ readonly status: 'restored' } & ParsedPipelineFile)
+  /**
+   * The saved text is not a pipeline this app can read. When `backedUp`, it was moved to
+   * `UNREADABLE_DRAFT_STORAGE_KEY`; otherwise it could not be copied and the next save replaces it.
+   */
+  | {
+      readonly status: 'unreadable';
+      readonly error: PipelineFileError;
+      readonly backedUp: boolean;
+    };
+
+/** Why the draft was not saved: storage is full, or the browser does not allow storage at all. */
+export type DraftSaveError = 'quota-exceeded' | 'unavailable';
+
+const EMPTY: DraftLoadResult = { status: 'empty' };
+
+/**
+ * Reads the draft from `storage` (`localStorage` by default; null when it is unavailable). A draft
+ * that cannot be read is moved to `UNREADABLE_DRAFT_STORAGE_KEY`, replacing an earlier one there,
+ * so that it is never overwritten without the user being told.
+ */
+export function loadDraft(storage: Storage | null = getLocalStorage()): DraftLoadResult {
+  if (storage === null) return EMPTY;
+  let text: string | null;
+  try {
+    text = storage.getItem(DRAFT_STORAGE_KEY);
+  } catch {
+    return EMPTY;
+  }
+  if (text === null) return EMPTY;
+
+  const parsed = parsePipelineFile(text);
+  if (parsed.ok) return { status: 'restored', ...parsed.value };
+  return { status: 'unreadable', error: parsed.error, backedUp: setAside(storage, text) };
+}
+
+/** Saves `pipeline` as the draft in `storage` (`localStorage` by default; null when unavailable). */
+export function saveDraft(
+  pipeline: Pipeline,
+  storage: Storage | null = getLocalStorage(),
+): Result<void, DraftSaveError> {
+  if (storage === null) return err('unavailable');
+  try {
+    storage.setItem(DRAFT_STORAGE_KEY, serializePipeline(pipeline));
+    return ok(undefined);
+  } catch (error) {
+    return err(isQuotaExceeded(error) ? 'quota-exceeded' : 'unavailable');
+  }
+}
+
+/** `localStorage`, or null when reading the property throws (some privacy settings make it). */
+function getLocalStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Copies an unreadable draft to the backup key and frees the draft key; false if it cannot copy. */
+function setAside(storage: Storage, text: string): boolean {
+  try {
+    storage.setItem(UNREADABLE_DRAFT_STORAGE_KEY, text);
+  } catch {
+    return false;
+  }
+  try {
+    storage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    // The copy is kept, and the next save replaces the draft anyway.
+  }
+  return true;
+}
+
+function isQuotaExceeded(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'QuotaExceededError';
+}

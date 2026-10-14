@@ -1,3 +1,11 @@
+export {
+  DRAFT_STORAGE_KEY,
+  type DraftLoadResult,
+  type DraftSaveError,
+  loadDraft,
+  UNREADABLE_DRAFT_STORAGE_KEY,
+} from './api/draft-storage';
+export { startAutosave } from './model/autosave';
 export { createPipelineStore, type PipelineActions, type Size } from './model/pipeline-store';
 export { PipelineStoreProvider } from './model/PipelineStoreProvider';
 export { usePipelineStore, usePipelineStoreApi } from './model/store-context';

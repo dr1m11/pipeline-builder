@@ -1,9 +1,7 @@
-import { createEmptyPipeline } from '@pipeline-builder/core';
 import { ReactFlowProvider } from '@xyflow/react';
 import { CodeXml } from 'lucide-react';
-import { useState } from 'react';
 
-import { createPipelineStore, PipelineStoreProvider, usePipelineStore } from '@/entities/pipeline';
+import { PipelineStoreProvider, usePipelineStore } from '@/entities/pipeline';
 import { NodePalette, useNodeDrop } from '@/features/add-node';
 import { ThemeToggle } from '@/features/toggle-theme';
 import { UndoRedoButtons, useUndoRedoShortcuts } from '@/features/undo-redo';
@@ -12,10 +10,10 @@ import { IconButton } from '@/shared/ui/icon-button';
 import { Inspector } from '@/widgets/inspector';
 import { PipelineCanvas } from '@/widgets/pipeline-canvas';
 
+import { useAutosavedStore } from '../model/use-autosaved-store';
+
 export function EditorPage() {
-  const [store] = useState(() =>
-    createPipelineStore(createEmptyPipeline({ id: 'draft', name: 'Untitled pipeline' })),
-  );
+  const store = useAutosavedStore();
 
   return (
     <PipelineStoreProvider store={store}>

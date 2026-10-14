@@ -3,11 +3,17 @@ import '../src/app/styles/index.css';
 import { withThemeByDataAttribute } from '@storybook/addon-themes';
 import type { Preview } from '@storybook/react-vite';
 
+import { DRAFT_STORAGE_KEY, UNREADABLE_DRAFT_STORAGE_KEY } from '../src/entities/pipeline';
 import { ToastProvider } from '../src/shared/ui/toast';
 import { TooltipProvider } from '../src/shared/ui/tooltip';
 
 const preview: Preview = {
   tags: ['autodocs'],
+  // Stories share the browser's storage: each one starts without an autosaved draft.
+  beforeEach: () => {
+    window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+    window.localStorage.removeItem(UNREADABLE_DRAFT_STORAGE_KEY);
+  },
   parameters: {
     layout: 'centered',
     controls: {
