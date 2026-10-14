@@ -2,6 +2,7 @@ import {
   type AbortSignalLike,
   formatLlmStreamEvent,
   LLM_ERROR_CODES,
+  LLM_PROVIDER_INFO,
   LlmError,
   type LlmProvider,
   type LlmRequest,
@@ -15,6 +16,7 @@ import {
   type ProxyLlmClientOptions,
 } from './proxy-llm-client';
 
+/** A request to the mock provider, which needs no API key. */
 const REQUEST: LlmRequest = {
   provider: 'mock',
   model: 'mock',
@@ -23,6 +25,14 @@ const REQUEST: LlmRequest = {
   temperature: 0.7,
   maxTokens: 256,
 };
+
+/** The providers whose requests carry an API key. */
+const KEYED_PROVIDERS = ['anthropic', 'openai'] as const satisfies readonly LlmProvider[];
+
+/** `REQUEST`, sent to the default model of `provider`. */
+function requestTo(provider: LlmProvider): LlmRequest {
+  return { ...REQUEST, provider, model: LLM_PROVIDER_INFO[provider].defaultModel };
+}
 
 const encoder = new TextEncoder();
 
@@ -140,17 +150,30 @@ describe('createProxyLlmClient', () => {
       expect(init.signal?.aborted).toBe(false);
     });
 
-    it('sends the API key for the provider as a bearer token, and only in that header', async () => {
-      const getApiKey = vi.fn<(provider: LlmProvider) => string | null>(() => 'sk-test-123');
+    it.each(KEYED_PROVIDERS)(
+      'sends the API key for %s as a bearer token, and only in that header',
+      async (provider) => {
+        const getApiKey = vi.fn<(provider: LlmProvider) => string | null>(() => 'sk-test-123');
+        const { client, fetchMock } = setUp(eventStream(bodyOf(wire(DONE))), { getApiKey });
+
+        await readAll(client.stream(requestTo(provider), newSignal()));
+
+        const { input, init, headers } = sent(fetchMock);
+        expect(getApiKey).toHaveBeenCalledExactlyOnceWith(provider);
+        expect(headers.get('Authorization')).toBe('Bearer sk-test-123');
+        expect(input).not.toContain('sk-test-123');
+        expect(init.body).not.toContain('sk-test-123');
+      },
+    );
+
+    it('sends no key for the mock provider, even one stored for it', async () => {
+      const getApiKey = vi.fn<(provider: LlmProvider) => string | null>(() => 'sk-stored');
       const { client, fetchMock } = setUp(eventStream(bodyOf(wire(DONE))), { getApiKey });
 
-      await readAll(client.stream(REQUEST, newSignal()));
+      await readAll(client.stream(requestTo('mock'), newSignal()));
 
-      const { input, init, headers } = sent(fetchMock);
-      expect(getApiKey).toHaveBeenCalledExactlyOnceWith('mock');
-      expect(headers.get('Authorization')).toBe('Bearer sk-test-123');
-      expect(input).not.toContain('sk-test-123');
-      expect(init.body).not.toContain('sk-test-123');
+      expect(sent(fetchMock).headers.has('Authorization')).toBe(false);
+      expect(getApiKey).not.toHaveBeenCalled();
     });
 
     it.each([null, ''])('sends no Authorization header when the key is %o', async (key) => {
@@ -158,7 +181,7 @@ describe('createProxyLlmClient', () => {
         getApiKey: () => key,
       });
 
-      await readAll(client.stream(REQUEST, newSignal()));
+      await readAll(client.stream(requestTo('anthropic'), newSignal()));
 
       expect(sent(fetchMock).headers.has('Authorization')).toBe(false);
     });
@@ -171,8 +194,8 @@ describe('createProxyLlmClient', () => {
         fetch: fetchMock,
       });
 
-      await readAll(client.stream(REQUEST, newSignal()));
-      await readAll(client.stream(REQUEST, newSignal()));
+      await readAll(client.stream(requestTo('openai'), newSignal()));
+      await readAll(client.stream(requestTo('openai'), newSignal()));
 
       expect(sent(fetchMock, 0).headers.get('Authorization')).toBeNull();
       expect(sent(fetchMock, 1).headers.get('Authorization')).toBe('Bearer sk-entered-later');
@@ -186,7 +209,7 @@ describe('createProxyLlmClient', () => {
         getApiKey: () => key,
       });
 
-      const { error } = await readAll(client.stream(REQUEST, newSignal()));
+      const { error } = await readAll(client.stream(requestTo('anthropic'), newSignal()));
 
       expect(error).toBeInstanceOf(LlmError);
       expect(error).toMatchObject({
@@ -357,10 +380,13 @@ describe('createProxyLlmClient', () => {
       });
     });
 
-    it('reports a successful answer that is not an event stream as upstream-error', async () => {
+    it.each([
+      ['an HTML page', { 'Content-Type': 'text/html' }],
+      ['no Content-Type', {}],
+    ])('reports a successful answer with %s as upstream-error', async (_, headers) => {
       const body = createBody();
       body.send('<!doctype html><title>Pipeline Builder</title>');
-      const { client } = setUp(eventStream(body, 'text/html'));
+      const { client } = setUp(new Response(body.stream, { headers }));
 
       const { error } = await readAll(client.stream(REQUEST, newSignal()));
 
@@ -370,6 +396,21 @@ describe('createProxyLlmClient', () => {
         message: 'The LLM proxy did not answer with an event stream.',
       });
       expect(body.cancelled).toBe(true);
+    });
+
+    it('reports an event stream without a body as network', async () => {
+      const { client } = setUp(
+        new Response(null, { headers: { 'Content-Type': 'text/event-stream' } }),
+      );
+
+      expect(await readAll(client.stream(REQUEST, newSignal()))).toMatchObject({
+        texts: [],
+        error: {
+          name: 'LlmError',
+          code: 'network',
+          message: 'The LLM proxy stopped answering before the answer was complete.',
+        },
+      });
     });
 
     it.each([

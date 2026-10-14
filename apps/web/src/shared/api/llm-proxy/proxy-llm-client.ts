@@ -1,6 +1,7 @@
 import {
   createSseParser,
-  LLM_ERROR_CODES,
+  LLM_ERROR_RESPONSE_SCHEMA,
+  LLM_PROVIDER_INFO,
   type LlmClient,
   LlmError,
   type LlmProvider,
@@ -9,15 +10,15 @@ import {
   parseLlmStreamEvent,
   type SseEvent,
 } from '@pipeline-builder/core';
-import * as z from 'zod';
 
 /** The proxy route that streams a model's answer, on the origin the app is served from. */
 export const LLM_STREAM_ENDPOINT = '/api/llm/stream';
 
 export interface ProxyLlmClientOptions {
   /**
-   * The user's API key for `provider`, or null when there is none (or the provider needs none).
-   * Read on every request; the key goes to the proxy only, as an `Authorization: Bearer` header.
+   * The user's API key for `provider`, or null when there is none. Asked on every request, and
+   * only for a provider that needs a key (`LLM_PROVIDER_INFO`): the key goes to the proxy only, as
+   * an `Authorization: Bearer` header.
    */
   readonly getApiKey: (provider: LlmProvider) => string | null;
   /** Sends the request; the browser's `fetch` by default. */
@@ -25,11 +26,6 @@ export interface ProxyLlmClientOptions {
   /** Where requests go; `LLM_STREAM_ENDPOINT` by default. */
   readonly endpoint?: string;
 }
-
-/** What the proxy answers, with a 4xx or 5xx status, when a request fails before streaming. */
-const ERROR_BODY_SCHEMA = z.object({
-  error: z.object({ code: z.enum(LLM_ERROR_CODES), message: z.string() }),
-});
 
 // The media type of a `Content-Type` header, whatever parameters follow it.
 const EVENT_STREAM_TYPE = /^\s*text\/event-stream\s*(?:;|$)/i;
@@ -61,7 +57,9 @@ export function createProxyLlmClient(options: ProxyLlmClientOptions): LlmClient 
       };
       signal.addEventListener('abort', abort, { once: true });
       try {
-        const headers = requestHeaders(getApiKey(request.provider));
+        // A key stored for a provider that needs none, such as the mock, is never sent.
+        const { needsApiKey } = LLM_PROVIDER_INFO[request.provider];
+        const headers = requestHeaders(needsApiKey ? getApiKey(request.provider) : null);
         const body = await post(send, endpoint, request, headers, controller.signal);
         yield* readAnswer(body, controller.signal);
       } catch (error) {
@@ -128,7 +126,7 @@ async function responseError(response: Response): Promise<LlmError> {
   } catch {
     json = undefined;
   }
-  const parsed = ERROR_BODY_SCHEMA.safeParse(json);
+  const parsed = LLM_ERROR_RESPONSE_SCHEMA.safeParse(json);
   if (parsed.success) return new LlmError(parsed.data.error.code, parsed.data.error.message);
   return new LlmError(
     'upstream-error',
