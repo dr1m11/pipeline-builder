@@ -28,8 +28,14 @@ function Editor() {
       <div role="dialog" aria-label="Settings">
         <button type="button">Close</button>
       </div>
+      <div role="menu" aria-label="File">
+        <div role="menuitem" tabIndex={-1}>
+          Export
+        </div>
+      </div>
+      {/* React Flow's mark for elements its own keys skip, such as a port. */}
       <div className="nokey">
-        <button type="button">Zoom</button>
+        <button type="button">Port</button>
       </div>
       <button
         type="button"
@@ -106,6 +112,7 @@ describe('useShortcuts', () => {
     ['a button', () => screen.getByRole('button', { name: 'Run' })],
     ['a select', () => screen.getByRole('combobox', { name: 'Operation' })],
     ['a checkbox', () => screen.getByRole('checkbox', { name: 'Enabled' })],
+    ['a .nokey element', () => screen.getByRole('button', { name: 'Port' })],
   ])('works while %s has focus', async (_control, element) => {
     const user = userEvent.setup();
     render(<Editor />);
@@ -123,7 +130,7 @@ describe('useShortcuts', () => {
     ['a textarea', () => screen.getByRole('textbox', { name: 'Description' })],
     ['an editable element', () => screen.getByRole('textbox', { name: 'Notes' })],
     ['a dialog', () => screen.getByRole('button', { name: 'Close' })],
-    ['a .nokey element', () => screen.getByRole('button', { name: 'Zoom' })],
+    ['a menu', () => screen.getByRole('menuitem', { name: 'Export' })],
     [
       'an element that handles the keys itself',
       () => screen.getByRole('button', { name: 'Handled' }),
@@ -156,7 +163,8 @@ describe('ownsKeys', () => {
     expect(ownsKeys(screen.getByRole('textbox', { name: 'Name' }))).toBe(true);
     expect(ownsKeys(screen.getByRole('textbox', { name: 'Notes' }))).toBe(true);
     expect(ownsKeys(screen.getByRole('button', { name: 'Close' }))).toBe(true);
-    expect(ownsKeys(screen.getByRole('button', { name: 'Zoom' }))).toBe(true);
+    expect(ownsKeys(screen.getByRole('menuitem', { name: 'Export' }))).toBe(true);
+    expect(ownsKeys(screen.getByRole('button', { name: 'Port' }))).toBe(false);
     expect(ownsKeys(screen.getByRole('button', { name: 'Run' }))).toBe(false);
     expect(ownsKeys(screen.getByRole('combobox', { name: 'Operation' }))).toBe(false);
     expect(ownsKeys(document)).toBe(false);

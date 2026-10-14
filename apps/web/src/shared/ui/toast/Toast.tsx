@@ -87,6 +87,11 @@ function ToastCard({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
+      // Escape closes the toast and goes no further, so page-wide shortcuts (Escape clears the
+      // canvas selection) do not act on it too.
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') event.stopPropagation();
+      }}
       className="flex items-start gap-3 rounded-lg border border-border bg-surface p-3 text-fg shadow-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-[swipe=cancel]:translate-x-0 data-[swipe=cancel]:transition-[translate] data-[swipe=move]:translate-x-(--radix-toast-swipe-move-x) motion-safe:animate-toast-in"
     >
       <Icon aria-hidden className={toneIconVariants({ tone })} />

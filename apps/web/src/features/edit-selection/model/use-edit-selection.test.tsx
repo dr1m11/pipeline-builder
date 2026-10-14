@@ -50,6 +50,10 @@ function Editor() {
       <div role="dialog" aria-label="Settings">
         <button type="button">Close</button>
       </div>
+      {/* React Flow's mark for elements its own keys skip, as a port of a node is. */}
+      <div className="nokey">
+        <button type="button">Port</button>
+      </div>
     </>
   );
 }
@@ -279,6 +283,18 @@ describe('useEditSelection clipboard', () => {
 
     expect(notes).toHaveValue(text);
     expect(store.getState().pipeline).toBe(pipeline);
+  });
+
+  it('copies and pastes while a port of a node has the focus', async () => {
+    const { store, labels, user } = renderEditor();
+    store.getState().select({ nodeIds: ['input'] });
+
+    await user.click(screen.getByRole('button', { name: 'Port' }));
+    const { handled, text } = pressCopy('copy');
+    await user.paste(text);
+
+    expect(handled).toBe(true);
+    expect(labels()).toEqual(['Input 1', 'Prompt 1', 'LLM Call 1', 'Input 2']);
   });
 
   it('leaves the clipboard alone while a dialog has the focus', async () => {

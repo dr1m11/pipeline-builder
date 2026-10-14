@@ -152,6 +152,23 @@ describe('Toast', () => {
     expect(onDelete).not.toHaveBeenCalled();
   });
 
+  it('closes on Escape and keeps the key from page-wide shortcuts', async () => {
+    const user = userEvent.setup();
+    const pageKeys = vi.fn<(event: KeyboardEvent) => void>();
+    document.addEventListener('keydown', pageKeys);
+    renderWithProviders(<Notify title="Copied 2 nodes" />);
+    await user.click(screen.getByRole('button', { name: 'Notify' }));
+
+    await user.keyboard('{F8}');
+    await user.tab();
+    expect(notifications().getByRole('listitem')).toHaveFocus();
+    await user.keyboard('{Escape}');
+
+    expect(notifications().queryByRole('listitem')).not.toBeInTheDocument();
+    expect(pageKeys.mock.calls.map(([event]) => event.key)).not.toContain('Escape');
+    document.removeEventListener('keydown', pageKeys);
+  });
+
   it('fails outside a provider', () => {
     expect(() => renderHook(() => useToast())).toThrow('useToast is used outside ToastProvider');
   });

@@ -22,16 +22,17 @@ const TEXT_INPUT_TYPES: ReadonlySet<string> = new Set([
 
 const EDITABLE = '[contenteditable]:not([contenteditable="false"])';
 
-// A dialog or a menu handles its keys itself. `.nokey` is how React Flow marks elements that keep
-// their keys too.
-const OWNS_KEYS = '.nokey, [role="dialog"], [role="alertdialog"], [role="menu"]';
+// A dialog or a menu handles its keys itself. React Flow's `.nokey` is not checked: it only keeps
+// the canvas's own keys (Delete, arrows, Enter) off an element, and a focused port or toast should
+// still undo with Ctrl+Z.
+const OWNS_KEYS = '[role="dialog"], [role="alertdialog"], [role="menu"]';
 
 /**
  * Listens for shortcuts on the whole page while the component is mounted. A pressed shortcut runs
  * the handler of the first binding that has it, and its default action is prevented. Keys pressed
- * where text is edited (a text input, a textarea, an editable element), in a dialog, a menu or a
- * `.nokey` element are left alone, and so are keys that something else has already handled
- * (`defaultPrevented`). The bindings may change on every render.
+ * where text is edited (a text input, a textarea, an editable element), in a dialog or in a menu
+ * are left alone, and so are keys that something else has already handled (`defaultPrevented`).
+ * The bindings may change on every render.
  */
 export function useShortcuts(bindings: readonly ShortcutBinding[]): void {
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
@@ -58,8 +59,8 @@ export function useShortcuts(bindings: readonly ShortcutBinding[]): void {
 
 /**
  * Whether keys pressed on `target` belong to it rather than to the page: it edits text (a text
- * input, a textarea, an editable element), or it is in a dialog, a menu or a `.nokey` element.
- * Clipboard shortcuts pressed there keep the browser's behaviour too.
+ * input, a textarea, an editable element), or it is in a dialog or a menu. Clipboard shortcuts
+ * pressed there keep the browser's behaviour too.
  */
 export function ownsKeys(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;

@@ -21,8 +21,7 @@ test.describe('clipboard', () => {
     await expect(edge('Input 1 value to Prompt 1 question')).toHaveCount(1);
 
     // Copy both nodes with the edge between them and paste them back: the browser's own clipboard
-    // events, with nothing asked of the user. (A focused port keeps its keys, so click a node.)
-    await node('Prompt 1').getByText('Prompt 1').click();
+    // events, with nothing asked of the user. The port just clicked still has the focus.
     await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('ControlOrMeta+C');
     await page.keyboard.press('ControlOrMeta+V');
