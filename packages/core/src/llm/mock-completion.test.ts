@@ -8,7 +8,7 @@ import {
   type PipelineTemplate,
   type PipelineTemplateId,
 } from '../pipeline-templates/pipeline-templates';
-import type { LlmRequest } from './llm-request';
+import { LLM_PROMPT_MAX_LENGTH, type LlmRequest } from './llm-request';
 import { mockCompletion, splitIntoTokens } from './mock-completion';
 
 /** A request with the default settings of an LLM Call node. */
@@ -160,8 +160,11 @@ describe('mockCompletion', () => {
       });
     });
 
-    it('answers an empty object when the prompt names no fields', () => {
-      expect(mockCompletion(request('Describe the weather as json.'))).toBe('{}');
+    it('answers in markdown when the prompt names no fields', () => {
+      expect(mockCompletion(request('What is JSON?'))).toMatch(/^\*\*What is JSON\?\*\*\n/);
+      expect(mockCompletion(request('Describe the weather as json.'))).toMatch(
+        /^\*\*Describe the weather as json\.\*\*\n/,
+      );
     });
 
     it('indents the object by two spaces', () => {
@@ -222,6 +225,20 @@ describe('mockCompletion', () => {
 
     expect(mockCompletion(request(prompt))).toBe(mockCompletion(request(prompt)));
     expect(mockCompletion(request(prompt, changes))).toBe(mockCompletion(request(prompt)));
+  });
+
+  // Patterns that rescanned a long run from each of its positions took about 15 s on these.
+  it.each([
+    ['a run without a question mark or a sentence end', '', 'x'],
+    ['a run without an @ for the email field', 'JSON with "email" and "name": ', 'x'],
+    ['a run after a sentiment question', 'Positive or negative? ', 'x'],
+    ['a run of spaces', 'Why?', ' '],
+  ])('answers the longest allowed prompt with %s quickly', (_, start, filler) => {
+    const prompt = start + filler.repeat(LLM_PROMPT_MAX_LENGTH - start.length);
+    const startedAt = Date.now();
+    mockCompletion(request(prompt));
+
+    expect(Date.now() - startedAt).toBeLessThan(1000);
   });
 });
 

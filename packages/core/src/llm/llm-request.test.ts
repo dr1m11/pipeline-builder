@@ -8,7 +8,7 @@ import {
   type LlmCallNodeData,
   type LlmProvider,
 } from '../nodes/llm-call';
-import { LLM_REQUEST_SCHEMA, type LlmRequest } from './llm-request';
+import { LLM_PROMPT_MAX_LENGTH, LLM_REQUEST_SCHEMA, type LlmRequest } from './llm-request';
 
 const WITHOUT_SYSTEM: LlmRequest = {
   ...LLM_CALL_DEFINITION.createData(),
@@ -48,6 +48,22 @@ describe('LLM_REQUEST_SCHEMA', () => {
     expect(ruleMessages({ prompt: ' \n' })).toEqual({ prompt: ['Required'] });
     expect(ruleMessages({ prompt: undefined })).toEqual({
       prompt: ['Invalid input: expected string, received undefined'],
+    });
+  });
+
+  it('accepts a prompt and a system prompt of up to 100 000 characters', () => {
+    const longest = 'x'.repeat(LLM_PROMPT_MAX_LENGTH);
+
+    expect(LLM_PROMPT_MAX_LENGTH).toBe(100_000);
+    expect(ruleMessages({ prompt: longest, system: longest })).toEqual({});
+  });
+
+  it('rejects a prompt or a system prompt that is longer', () => {
+    const tooLong = 'x'.repeat(LLM_PROMPT_MAX_LENGTH + 1);
+
+    expect(ruleMessages({ prompt: tooLong, system: tooLong })).toEqual({
+      prompt: ['Must be at most 100000 characters'],
+      system: ['Must be at most 100000 characters'],
     });
   });
 

@@ -55,7 +55,7 @@ export {
 } from './history/history';
 export { type AbortSignalLike, type LlmClient } from './llm/llm-client';
 export { LLM_ERROR_CODES, LlmError, type LlmErrorCode } from './llm/llm-error';
-export { LLM_REQUEST_SCHEMA, type LlmRequest } from './llm/llm-request';
+export { LLM_PROMPT_MAX_LENGTH, LLM_REQUEST_SCHEMA, type LlmRequest } from './llm/llm-request';
 export {
   formatLlmStreamEvent,
   type LlmStreamEvent,

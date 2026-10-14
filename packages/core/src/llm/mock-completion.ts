@@ -10,11 +10,12 @@ import type { LlmRequest } from './llm-request';
  *    "love") or −1 ("broken", "late"), or the opposite right after "not", "no", "never" or a word
  *    ending in "n't"; "positive" and "negative" themselves do not count. A total below zero gives
  *    `negative`, any other total `positive`.
- * 2. **JSON.** A prompt with the word "JSON" gets a JSON object, indented by two spaces, with every
- *    field named in double quotes (straight or curly) in the prompt, in order of first mention.
- *    `email` is the first email address in the prompt and `name` the one to three capitalised
- *    words after "I'm", "I am", "my name is" or "this is"; other fields, and fields whose value is
- *    not found, are `null`.
+ * 2. **JSON.** A prompt with the word "JSON" that names at least one field in double quotes
+ *    (straight or curly) gets a JSON object, indented by two spaces, with those fields in order of
+ *    first mention. `email` is the first email address in the prompt and `name` the one to three
+ *    capitalised words after "I'm", "I am", "my name is" or "this is"; other fields, and fields
+ *    whose value is not found, are `null`. A prompt about JSON that names no field ("What is
+ *    JSON?") falls through to the next rule.
  * 3. **Anything else** gets a short markdown answer: the question in bold, then a note that the
  *    answer comes from the mock provider. The question is the last sentence of the prompt that ends
  *    with "?", without what comes before its last ": " ("Answer the question: Why is the sky blue?"
@@ -39,9 +40,14 @@ export function splitIntoTokens(text: string): readonly string[] {
 
 function mockAnswer(prompt: string): string {
   if (SENTIMENT_QUESTION.test(prompt)) return classifySentiment(prompt);
-  if (JSON_REQUEST.test(prompt)) return extractJson(prompt);
+  const fields = JSON_REQUEST.test(prompt) ? quotedFieldNames(prompt) : [];
+  if (fields.length > 0) return jsonObject(prompt, fields);
   return answerQuestion(prompt);
 }
+
+// The prompt reaches the proxy's mock unauthenticated, so every pattern below runs in linear time:
+// a pattern that could start anywhere inside a long run of characters starts only where the run
+// does, instead of rescanning the rest of the run from each of its positions.
 
 // Sentiment
 
@@ -116,7 +122,7 @@ function polarity(word: string, previous = ''): number {
 
 const JSON_REQUEST = /\bjson\b/i;
 const FIELD_NAME = /["“]([A-Za-z_][A-Za-z0-9_]*)["”]/g;
-const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
+const EMAIL = /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
 const NAME =
   /\b(?:I['’]m|I am|[Mm]y name is|[Tt]his is)\s+(\p{Lu}[\p{L}'’-]*(?:\s+\p{Lu}[\p{L}'’-]*){0,2})/u;
 
@@ -126,9 +132,13 @@ const FIELD_EXTRACTORS: ReadonlyMap<string, (prompt: string) => string | null> =
   ['name', (prompt: string) => NAME.exec(prompt)?.[1] ?? null],
 ]);
 
-function extractJson(prompt: string): string {
-  const fields = new Set(Array.from(prompt.matchAll(FIELD_NAME), ([, name = '']) => name));
-  const entries = Array.from(fields, (field): [string, string | null] => [
+// Field names in double quotes, unique, in order of first mention.
+function quotedFieldNames(prompt: string): readonly string[] {
+  return [...new Set(Array.from(prompt.matchAll(FIELD_NAME), ([, name = '']) => name))];
+}
+
+function jsonObject(prompt: string, fields: readonly string[]): string {
+  const entries = fields.map((field): [string, string | null] => [
     field,
     FIELD_EXTRACTORS.get(field)?.(prompt) ?? null,
   ]);
@@ -152,7 +162,7 @@ function answerQuestion(prompt: string): string {
 
 // The last question of the prompt without its lead-in, else its first line, else a stand-in.
 function answerTitle(prompt: string): string {
-  const questions = prompt.match(/[^.!?\r\n]+\?/g) ?? [];
+  const questions = prompt.match(/(?<![^.!?\r\n])[^.!?\r\n]+\?/g) ?? [];
   const question = questions.at(-1)?.split(': ').at(-1)?.trim() ?? '';
   if (question !== '') return question;
 
