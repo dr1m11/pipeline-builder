@@ -1,16 +1,19 @@
 import {
-  addNode,
-  connect,
   type ConnectionCandidate,
+  createHistoryEntry,
+  EMPTY_HISTORY,
+  executeCommand,
   findNode,
-  moveNodes,
+  type History,
+  type HistoryStep,
   type NodeKind,
   type Pipeline,
+  type PipelineCommand,
   type PipelineNode,
   type Position,
-  removeElements,
-  renameNode,
-  updateNodeData,
+  recordChange,
+  redoChange,
+  undoChange,
   validateConnection,
 } from '@pipeline-builder/core';
 import { createStore, type StoreApi } from 'zustand/vanilla';
@@ -33,9 +36,8 @@ export interface ElementIds {
   readonly edgeIds?: readonly string[];
 }
 
-export interface PipelineState {
-  /** The document: the only part that is saved, validated and run. */
-  readonly pipeline: Pipeline;
+/** State of the canvas kept beside the document. It is never saved and never enters the history. */
+interface ViewState {
   readonly selectedNodeIds: ReadonlySet<string>;
   readonly selectedEdgeIds: ReadonlySet<string>;
   /** Rendered node sizes, reported by the canvas. */
@@ -44,9 +46,17 @@ export interface PipelineState {
   readonly dragPositions: ReadonlyMap<string, Position>;
 }
 
+export interface PipelineState extends ViewState {
+  /** The document: the only part that is saved, validated, run and undone. */
+  readonly pipeline: Pipeline;
+  /** Changes of the pipeline that can be undone and redone (see docs/adr/0009). */
+  readonly history: History;
+}
+
 /**
  * Store actions. Each one leaves the state untouched, and notifies nobody, when nothing changes.
- * View state is kept only for elements of the pipeline: ids it does not contain are ignored.
+ * View state is kept only for elements of the pipeline: ids it does not contain are ignored, and
+ * the view state of elements that a change, an undo or a redo takes away is dropped.
  */
 export interface PipelineActions {
   /** Adds a node of `kind` with the next free label and returns it. */
@@ -68,6 +78,10 @@ export interface PipelineActions {
   updateNodeData: (nodeId: string, changes: Readonly<Record<string, unknown>>) => void;
   /** Renames a node; the label is trimmed, and a blank or too long label is ignored. */
   renameNode: (nodeId: string, label: string) => void;
+  /** Reverts the last change of the pipeline. Ignored while nodes are dragged. */
+  undo: () => void;
+  /** Applies the last undone change again. Ignored while nodes are dragged. */
+  redo: () => void;
   updateSelection: (changes: SelectionChanges) => void;
   /** Makes these elements, and only these, the selection. */
   select: (ids: ElementIds) => void;
@@ -79,138 +93,181 @@ export type PipelineStore = StoreApi<PipelineState & PipelineActions>;
 export interface PipelineStoreOptions {
   /** Generates ids for new nodes and edges; random UUIDs by default. */
   readonly createId?: () => string;
+  /** Current time in ms, which decides what merges in the history; `Date.now()` by default. */
+  readonly now?: () => number;
 }
 
 /**
- * Creates the store that holds a pipeline being edited. The pipeline changes only through core
- * operations; selection, sizes and drag positions are view state kept beside it.
+ * Creates the store that holds a pipeline being edited. Every change of the pipeline is a core
+ * command that goes through one path, which records it in the history (see docs/adr/0009);
+ * selection, sizes and drag positions are view state kept beside it.
  */
 export function createPipelineStore(
   pipeline: Pipeline,
-  { createId = () => crypto.randomUUID() }: PipelineStoreOptions = {},
+  { createId = () => crypto.randomUUID(), now = () => Date.now() }: PipelineStoreOptions = {},
 ): PipelineStore {
-  return createStore<PipelineState & PipelineActions>()((set, get) => ({
-    pipeline,
-    selectedNodeIds: new Set(),
-    selectedEdgeIds: new Set(),
-    measured: new Map(),
-    dragPositions: new Map(),
-
-    addNode: (kind, position) => {
-      const result = addNode(get().pipeline, { kind, id: createId(), position });
-      set({ pipeline: result.pipeline });
-      return result.node;
-    },
-
-    dragNodes: (positions) => {
+  return createStore<PipelineState & PipelineActions>()((set, get) => {
+    /**
+     * Executes `command`, records it in the history and applies `view` along with it. A command
+     * that fails or changes nothing changes no state. Returns whether the pipeline changed.
+     */
+    const execute = (command: PipelineCommand, view: Partial<ViewState> = {}): boolean => {
       const state = get();
-      const changed = [...positions].filter(
-        ([id, position]) =>
-          findNode(state.pipeline, id) !== undefined &&
-          !samePosition(state.dragPositions.get(id), position),
-      );
-      if (changed.length === 0) return;
-      set({ dragPositions: new Map([...state.dragPositions, ...changed]) });
-    },
-
-    moveNodes: (positions) => {
-      const state = get();
-      const next = moveNodes(state.pipeline, positions);
-      const dragPositions = filterKeys(state.dragPositions, (id) => !positions.has(id));
-      if (next === state.pipeline && dragPositions === state.dragPositions) return;
-      set({ pipeline: next, dragPositions });
-    },
-
-    removeElements: (ids) => {
-      const state = get();
-      const next = removeElements(state.pipeline, ids);
-      if (next === state.pipeline) return;
-      const nodeIds = new Set(next.nodes.map((node) => node.id));
-      const edgeIds = new Set(next.edges.map((edge) => edge.id));
+      const result = executeCommand(state.pipeline, command);
+      if (!result.ok || result.value === state.pipeline) return false;
+      const next = result.value;
+      const entry = createHistoryEntry(command, { before: state.pipeline, after: next, at: now() });
       set({
         pipeline: next,
-        selectedNodeIds: filterSet(state.selectedNodeIds, (id) => nodeIds.has(id)),
-        selectedEdgeIds: filterSet(state.selectedEdgeIds, (id) => edgeIds.has(id)),
-        measured: filterKeys(state.measured, (id) => nodeIds.has(id)),
-        dragPositions: filterKeys(state.dragPositions, (id) => nodeIds.has(id)),
+        history: recordChange(state.history, entry),
+        ...pruneViewState({ ...state, ...view }, next),
       });
-    },
+      return true;
+    };
 
-    canConnect: (candidate) => validateConnection(get().pipeline, candidate).ok,
-
-    connect: (candidate) => {
-      const state = get();
-      const result = connect(state.pipeline, candidate, createId());
-      if (!result.ok || result.value.pipeline === state.pipeline) return;
-      const { pipeline: next, replacedEdge } = result.value;
+    /** Shows the document of an undo or a redo and keeps the history it leaves. */
+    const applyStep = (step: HistoryStep | null): void => {
+      if (step === null) return;
       set({
-        pipeline: next,
-        selectedEdgeIds:
-          replacedEdge === null
-            ? state.selectedEdgeIds
-            : filterSet(state.selectedEdgeIds, (id) => id !== replacedEdge.id),
+        pipeline: step.pipeline,
+        history: step.history,
+        ...pruneViewState(get(), step.pipeline),
       });
-    },
+    };
 
-    updateNodeData: (nodeId, changes) => {
-      const { pipeline: current } = get();
-      const result = updateNodeData(current, nodeId, changes);
-      if (result.ok && result.value !== current) set({ pipeline: result.value });
-    },
+    return {
+      pipeline,
+      history: EMPTY_HISTORY,
+      selectedNodeIds: new Set(),
+      selectedEdgeIds: new Set(),
+      measured: new Map(),
+      dragPositions: new Map(),
 
-    renameNode: (nodeId, label) => {
-      const { pipeline: current } = get();
-      const result = renameNode(current, nodeId, label);
-      if (result.ok && result.value !== current) set({ pipeline: result.value });
-    },
+      addNode: (kind, position) => {
+        const id = createId();
+        execute({ type: 'add-node', id, kind, position });
+        const node = findNode(get().pipeline, id);
+        if (node === undefined) throw new Error(`Node ${id} was not added`);
+        return node;
+      },
 
-    updateSelection: (changes) => {
-      const state = get();
-      const { pipeline: current } = state;
-      const selectedNodeIds = applySelection(
-        state.selectedNodeIds,
-        changes.nodes,
-        (id) => findNode(current, id) !== undefined,
-      );
-      const selectedEdgeIds = applySelection(state.selectedEdgeIds, changes.edges, (id) =>
-        current.edges.some((edge) => edge.id === id),
-      );
-      if (selectedNodeIds === state.selectedNodeIds && selectedEdgeIds === state.selectedEdgeIds) {
-        return;
-      }
-      set({ selectedNodeIds, selectedEdgeIds });
-    },
-
-    select: ({ nodeIds = [], edgeIds = [] }) => {
-      const state = get();
-      const { pipeline: current } = state;
-      const selectedNodeIds = replaceSet(
-        state.selectedNodeIds,
-        nodeIds.filter((id) => findNode(current, id) !== undefined),
-      );
-      const selectedEdgeIds = replaceSet(
-        state.selectedEdgeIds,
-        edgeIds.filter((id) => current.edges.some((edge) => edge.id === id)),
-      );
-      if (selectedNodeIds === state.selectedNodeIds && selectedEdgeIds === state.selectedEdgeIds) {
-        return;
-      }
-      set({ selectedNodeIds, selectedEdgeIds });
-    },
-
-    setMeasured: (sizes) => {
-      const { pipeline: current, measured } = get();
-      const changed = [...sizes].filter(([id, size]) => {
-        const known = measured.get(id);
-        return (
-          findNode(current, id) !== undefined &&
-          (known?.width !== size.width || known.height !== size.height)
+      dragNodes: (positions) => {
+        const state = get();
+        const changed = [...positions].filter(
+          ([id, position]) =>
+            findNode(state.pipeline, id) !== undefined &&
+            !samePosition(state.dragPositions.get(id), position),
         );
-      });
-      if (changed.length === 0) return;
-      set({ measured: new Map([...measured, ...changed]) });
-    },
-  }));
+        if (changed.length === 0) return;
+        set({ dragPositions: new Map([...state.dragPositions, ...changed]) });
+      },
+
+      moveNodes: (positions) => {
+        const { dragPositions } = get();
+        const remaining = filterKeys(dragPositions, (id) => !positions.has(id));
+        const moved = execute({ type: 'move-nodes', positions }, { dragPositions: remaining });
+        // A drag that ends where it started changes nothing in the document, but it still ends.
+        if (!moved && remaining !== dragPositions) set({ dragPositions: remaining });
+      },
+
+      removeElements: (ids) => {
+        execute({ type: 'remove-elements', ...ids });
+      },
+
+      canConnect: (candidate) => validateConnection(get().pipeline, candidate).ok,
+
+      connect: (candidate) => {
+        execute({ type: 'connect', candidate, edgeId: createId() });
+      },
+
+      updateNodeData: (nodeId, changes) => {
+        execute({ type: 'update-node-data', nodeId, changes });
+      },
+
+      renameNode: (nodeId, label) => {
+        execute({ type: 'rename-node', nodeId, label });
+      },
+
+      // Never during a drag: its drop would then move nodes of a document that is no longer shown.
+      undo: () => {
+        const state = get();
+        if (state.dragPositions.size === 0) applyStep(undoChange(state.history));
+      },
+
+      redo: () => {
+        const state = get();
+        if (state.dragPositions.size === 0) applyStep(redoChange(state.history));
+      },
+
+      updateSelection: (changes) => {
+        const state = get();
+        const { pipeline: current } = state;
+        const selectedNodeIds = applySelection(
+          state.selectedNodeIds,
+          changes.nodes,
+          (id) => findNode(current, id) !== undefined,
+        );
+        const selectedEdgeIds = applySelection(state.selectedEdgeIds, changes.edges, (id) =>
+          current.edges.some((edge) => edge.id === id),
+        );
+        if (
+          selectedNodeIds === state.selectedNodeIds &&
+          selectedEdgeIds === state.selectedEdgeIds
+        ) {
+          return;
+        }
+        set({ selectedNodeIds, selectedEdgeIds });
+      },
+
+      select: ({ nodeIds = [], edgeIds = [] }) => {
+        const state = get();
+        const { pipeline: current } = state;
+        const selectedNodeIds = replaceSet(
+          state.selectedNodeIds,
+          nodeIds.filter((id) => findNode(current, id) !== undefined),
+        );
+        const selectedEdgeIds = replaceSet(
+          state.selectedEdgeIds,
+          edgeIds.filter((id) => current.edges.some((edge) => edge.id === id)),
+        );
+        if (
+          selectedNodeIds === state.selectedNodeIds &&
+          selectedEdgeIds === state.selectedEdgeIds
+        ) {
+          return;
+        }
+        set({ selectedNodeIds, selectedEdgeIds });
+      },
+
+      setMeasured: (sizes) => {
+        const { pipeline: current, measured } = get();
+        const changed = [...sizes].filter(([id, size]) => {
+          const known = measured.get(id);
+          return (
+            findNode(current, id) !== undefined &&
+            (known?.width !== size.width || known.height !== size.height)
+          );
+        });
+        if (changed.length === 0) return;
+        set({ measured: new Map([...measured, ...changed]) });
+      },
+    };
+  });
+}
+
+/**
+ * Drops the view state of elements that `pipeline` does not have. A part that loses nothing is
+ * returned as it is, so components that select it do not re-render.
+ */
+function pruneViewState(view: ViewState, pipeline: Pipeline): ViewState {
+  const nodeIds = new Set(pipeline.nodes.map((node) => node.id));
+  const edgeIds = new Set(pipeline.edges.map((edge) => edge.id));
+  return {
+    selectedNodeIds: filterSet(view.selectedNodeIds, (id) => nodeIds.has(id)),
+    selectedEdgeIds: filterSet(view.selectedEdgeIds, (id) => edgeIds.has(id)),
+    measured: filterKeys(view.measured, (id) => nodeIds.has(id)),
+    dragPositions: filterKeys(view.dragPositions, (id) => nodeIds.has(id)),
+  };
 }
 
 /**
