@@ -83,6 +83,8 @@ export const WithKeysSaved: Story = {
     const anthropic = within(dialog).getByLabelText('Anthropic');
     await expect(anthropic).toHaveAttribute('type', 'password');
     await expect(anthropic).toHaveValue('sk-ant-example-key');
+    // The key is the field's value, never its attribute: it stays out of the page's markup.
+    await expect(anthropic).not.toHaveAttribute('value');
     await expect(
       within(dialog).getByRole('checkbox', { name: 'Remember on this device' }),
     ).toBeChecked();

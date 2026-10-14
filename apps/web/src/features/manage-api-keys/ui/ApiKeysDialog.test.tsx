@@ -1,5 +1,5 @@
 import type { LlmProvider } from '@pipeline-builder/core';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -173,6 +173,40 @@ describe('ApiKeysDialog', () => {
     expect(
       within(dialog()).getByRole('button', { name: 'Show Anthropic key' }),
     ).toBeInTheDocument();
+  });
+
+  it('keeps the keys out of the value attribute of its fields, and so out of the markup', async () => {
+    saveApiKey('anthropic', 'sk-ant-saved', { remember: false });
+    const { user } = renderDialog();
+    await openDialog(user);
+    expect(field('Anthropic')).toHaveValue('sk-ant-saved');
+    expect(field('Anthropic')).not.toHaveAttribute('value');
+
+    await user.type(field('Anthropic'), '-typed');
+    await user.type(field('OpenAI'), 'sk-oai-typed');
+    await user.click(within(dialog()).getByRole('button', { name: 'Show OpenAI key' }));
+
+    expect(field('Anthropic')).toHaveValue('sk-ant-saved-typed');
+    for (const name of ['Anthropic', 'OpenAI']) {
+      expect(field(name)).not.toHaveAttribute('value');
+    }
+    expect(document.documentElement.outerHTML).not.toMatch(/sk-ant-saved|sk-oai-typed/);
+  });
+
+  it('gives focus back to its button when a click left the button unfocused', async () => {
+    renderDialog();
+    const user = userEvent.setup();
+    expect(document.body).toHaveFocus();
+
+    // Safari, and Firefox on macOS, do not focus a button on a click, unlike userEvent.click.
+    act(() => {
+      openButton().click();
+    });
+    expect(field('Anthropic')).toHaveFocus();
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(openButton()).toHaveFocus();
   });
 
   it('hides the keys again each time it opens', async () => {

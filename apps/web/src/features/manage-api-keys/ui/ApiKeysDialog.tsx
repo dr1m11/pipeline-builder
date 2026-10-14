@@ -1,6 +1,6 @@
 import { LLM_PROVIDER_INFO, type LlmProvider } from '@pipeline-builder/core';
 import { Eye, EyeOff, Trash2 } from 'lucide-react';
-import { type SubmitEvent, useId, useRef, useState } from 'react';
+import { type SubmitEvent, useCallback, useId, useRef, useState } from 'react';
 
 import {
   API_KEY_PROVIDERS,
@@ -81,22 +81,24 @@ interface ApiKeysFormProps {
 /** The fields of the dialog. It mounts each time the dialog opens, so it starts from the saved keys. */
 function ApiKeysForm({ fieldId, onSaved }: ApiKeysFormProps) {
   const { toast } = useToast();
-  const [values, setValues] = useState<ReadonlyMap<LlmProvider, string>>(
-    () => new Map(API_KEY_PROVIDERS.map((provider) => [provider, getApiKey(provider) ?? ''])),
-  );
+  // The key fields are uncontrolled (see `ApiKeyField`): their values are read from the elements.
+  const inputsRef = useRef(new Map<LlmProvider, HTMLInputElement>());
   const [remember, setRemember] = useState(() => API_KEY_PROVIDERS.some(isApiKeyRemembered));
   const [status, setStatus] = useState('');
   const rememberId = useId();
   const rememberHintId = useId();
 
-  const setValue = (provider: LlmProvider, value: string) => {
-    setValues((current) => new Map(current).set(provider, value));
-  };
+  const registerInput = useCallback((provider: LlmProvider, input: HTMLInputElement) => {
+    inputsRef.current.set(provider, input);
+    return () => {
+      inputsRef.current.delete(provider);
+    };
+  }, []);
 
   const save = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const kept = API_KEY_PROVIDERS.map((provider) =>
-      saveApiKey(provider, values.get(provider) ?? '', { remember }),
+      saveApiKey(provider, inputsRef.current.get(provider)?.value ?? '', { remember }),
     );
     if (kept.includes('page')) {
       toast({
@@ -110,10 +112,12 @@ function ApiKeysForm({ fieldId, onSaved }: ApiKeysFormProps) {
 
   const clear = (provider: LlmProvider) => {
     clearApiKey(provider);
-    setValue(provider, '');
     setStatus(`${LLM_PROVIDER_INFO[provider].title} key cleared.`);
+    const input = inputsRef.current.get(provider);
+    if (input === undefined) return;
+    input.value = '';
     // The Clear button is disabled now: the field is where a new key goes.
-    document.getElementById(fieldId(provider))?.focus();
+    input.focus();
   };
 
   return (
@@ -123,10 +127,7 @@ function ApiKeysForm({ fieldId, onSaved }: ApiKeysFormProps) {
           key={provider}
           id={fieldId(provider)}
           provider={provider}
-          value={values.get(provider) ?? ''}
-          onChange={(value) => {
-            setValue(provider, value);
-          }}
+          registerInput={registerInput}
           onClear={() => {
             clear(provider);
           }}
@@ -166,16 +167,31 @@ function ApiKeysForm({ fieldId, onSaved }: ApiKeysFormProps) {
 interface ApiKeyFieldProps {
   id: string;
   provider: LlmProvider;
-  value: string;
-  onChange: (value: string) => void;
+  /** Hands the form the field's element; returns a function that takes it back. */
+  registerInput: (provider: LlmProvider, input: HTMLInputElement) => () => void;
   onClear: () => void;
 }
 
-/** The key of one provider: a password field named after the provider, Show or Hide, and Clear. */
-function ApiKeyField({ id, provider, value, onChange, onClear }: ApiKeyFieldProps) {
+/**
+ * The key of one provider: a password field named after the provider, Show or Hide, and Clear.
+ *
+ * The field is uncontrolled, and the saved key goes in through the `value` property: React mirrors
+ * a `value` or `defaultValue` prop into the `value` attribute, which would leave the key in the DOM
+ * for anything that reads or serializes the page.
+ */
+function ApiKeyField({ id, provider, registerInput, onClear }: ApiKeyFieldProps) {
   const { title } = LLM_PROVIDER_INFO[provider];
   const saved = useApiKey(provider) !== null;
   const [visible, setVisible] = useState(false);
+  // Stable, so that it runs when the field mounts rather than on every render.
+  const attachInput = useCallback(
+    (input: HTMLInputElement | null) => {
+      if (input === null) return;
+      input.value = getApiKey(provider) ?? '';
+      return registerInput(provider, input);
+    },
+    [provider, registerInput],
+  );
 
   return (
     <div className="flex flex-col gap-1">
@@ -185,14 +201,17 @@ function ApiKeyField({ id, provider, value, onChange, onClear }: ApiKeyFieldProp
       <div className="flex items-center gap-1">
         <div className="relative flex-1">
           <Input
+            ref={attachInput}
             id={id}
             type={visible ? 'text' : 'password'}
-            value={value}
-            onChange={(event) => {
-              onChange(event.target.value);
-            }}
             autoComplete="off"
             spellCheck={false}
+            // Asks password managers (1Password, LastPass, Bitwarden, Dashlane, in that order) to
+            // neither offer to save the key as this site's password nor fill a password in.
+            data-1p-ignore=""
+            data-lpignore="true"
+            data-bwignore=""
+            data-form-type="other"
             className="pr-9 font-mono"
           />
           <IconButton

@@ -7,10 +7,22 @@ export interface ApiKeysButtonProps {
   onClick: () => void;
 }
 
-/** The header button that opens the API keys dialog (`ApiKeysDialog`). */
+/**
+ * The header button that opens the API keys dialog (`ApiKeysDialog`).
+ *
+ * It takes focus before it opens the dialog: Safari, and Firefox on macOS, leave a clicked button
+ * unfocused, and the dialog gives focus back to whatever had it when it opened.
+ */
 export function ApiKeysButton({ onClick }: ApiKeysButtonProps) {
   return (
-    <IconButton label="API keys" aria-haspopup="dialog" onClick={onClick}>
+    <IconButton
+      label="API keys"
+      aria-haspopup="dialog"
+      onClick={(event) => {
+        event.currentTarget.focus();
+        onClick();
+      }}
+    >
       <KeyRound aria-hidden />
     </IconButton>
   );
