@@ -492,3 +492,79 @@ describe('EditorPage import', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('EditorPage keyboard shortcuts help', () => {
+  const helpButton = () => screen.getByRole('button', { name: 'Keyboard shortcuts' });
+
+  it('opens with ? and lists the shortcuts of the editor and its canvas', async () => {
+    const { user } = renderPage();
+
+    await user.keyboard('?');
+
+    const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    expect(
+      within(dialog)
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent),
+    ).toEqual(['Edit', 'Canvas', 'Help']);
+    const edit = within(dialog).getByRole('table', { name: 'Edit' });
+    for (const row of [
+      'Undo Ctrl Z',
+      'Redo Ctrl Shift Z or Ctrl Y',
+      'Paste Ctrl V',
+      'Duplicate Ctrl D',
+    ]) {
+      expect(within(edit).getByRole('row', { name: row })).toBeInTheDocument();
+    }
+    const canvas = within(dialog).getByRole('table', { name: 'Canvas' });
+    for (const row of [
+      'Delete the selection Delete or Backspace',
+      'Move the selected nodes Arrow keys',
+      'Select the nodes in an area Shift Drag',
+      'Add to or remove from the selection Ctrl Click',
+    ]) {
+      expect(within(canvas).getByRole('row', { name: row })).toBeInTheDocument();
+    }
+    const help = within(dialog).getByRole('table', { name: 'Help' });
+    expect(
+      within(help).getByRole('row', { name: 'Show keyboard shortcuts ?' }),
+    ).toBeInTheDocument();
+  });
+
+  it('opens from the header and closes with Escape, back on its button', async () => {
+    const { user } = renderPage();
+
+    await user.click(helpButton());
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(helpButton()).toHaveFocus();
+  });
+
+  it('keeps the selected node when Delete or Backspace is pressed in the help', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+    expect(await screen.findByRole('group', { name: 'Prompt 1' })).toBeInTheDocument();
+
+    await user.keyboard('?');
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toHaveFocus();
+    await user.keyboard('{Delete}{Backspace}{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Prompt 1' })).toBeInTheDocument();
+    const toolbar = screen.getByRole('toolbar', { name: 'Edit' });
+    expect(within(toolbar).getByRole('button', { name: 'Undo Add Prompt' })).toBeEnabled();
+  });
+
+  it('leaves ? typed in a text field to the field', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+    const name = screen.getByRole('textbox', { name: 'Name' });
+
+    await user.type(name, '?');
+
+    expect(name).toHaveValue('Prompt 1?');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});

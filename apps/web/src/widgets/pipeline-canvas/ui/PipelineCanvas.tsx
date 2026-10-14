@@ -15,15 +15,16 @@ import { useCallback, useState } from 'react';
 import { PIPELINE_NODE_TYPE, type PipelineFlowNode, PipelineNodeView } from '@/entities/node';
 import { usePipelineStoreApi } from '@/entities/pipeline';
 
+import { DELETE_KEYS } from '../config/shortcuts';
 import { translateEdgeChanges, translateNodeChanges } from '../model/flow-changes';
 import { toConnectionCandidate } from '../model/flow-connections';
 import type { PipelineFlowEdge } from '../model/flow-elements';
 import { useFitReplacedDocument } from '../model/use-fit-replaced-document';
 import { useFlowElements } from '../model/use-flow-elements';
 
-// Module-level so React Flow does not see new node types, or new keys, on every render.
+// Module-level so React Flow does not see new node types on every render; the delete keys are
+// module-level in config for the same reason.
 const NODE_TYPES = { [PIPELINE_NODE_TYPE]: PipelineNodeView } satisfies NodeTypes;
-const DELETE_KEYS = ['Backspace', 'Delete'];
 // React Flow's default of 0.5 is too close for a fit to show the widest template (six cards in a
 // row) on the narrowest supported canvas.
 const MIN_ZOOM = 0.2;

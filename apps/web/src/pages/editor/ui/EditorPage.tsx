@@ -1,11 +1,13 @@
 import { ReactFlowProvider } from '@xyflow/react';
 import { CodeXml } from 'lucide-react';
+import { useState } from 'react';
 
 import { PipelineStoreProvider, usePipelineStore } from '@/entities/pipeline';
 import { NodePalette, useNodeDrop } from '@/features/add-node';
 import { useEditSelection } from '@/features/edit-selection';
 import { ExportButton, ImportButton } from '@/features/import-export';
 import { NewPipelineMenu, TemplateButtons } from '@/features/load-template';
+import { ShortcutsHelp, useShowShortcutsShortcut } from '@/features/show-shortcuts';
 import { ThemeToggle } from '@/features/toggle-theme';
 import { UndoRedoButtons, useUndoRedoShortcuts } from '@/features/undo-redo';
 import { REPOSITORY_URL } from '@/shared/config';
@@ -13,16 +15,22 @@ import { IconButton } from '@/shared/ui/icon-button';
 import { Inspector } from '@/widgets/inspector';
 import { PipelineCanvas } from '@/widgets/pipeline-canvas';
 
+import { EDITOR_SHORTCUTS } from '../config/shortcuts';
 import { useAutosavedStore } from '../model/use-autosaved-store';
 
 export function EditorPage() {
   const store = useAutosavedStore();
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
 
   return (
     <PipelineStoreProvider store={store}>
       {/* Wraps the page, not just the canvas: the palette adds nodes where the canvas is looking. */}
       <ReactFlowProvider>
-        <EditorShortcuts />
+        <EditorShortcuts
+          onShowShortcuts={() => {
+            setShortcutsHelpOpen(true);
+          }}
+        />
         <div className="grid h-full grid-rows-[auto_1fr]">
           <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2">
             <PipelineName />
@@ -37,6 +45,11 @@ export function EditorPage() {
                 <UndoRedoButtons />
               </div>
               <span aria-hidden className="h-5 w-px bg-border" />
+              <ShortcutsHelp
+                shortcuts={EDITOR_SHORTCUTS}
+                open={shortcutsHelpOpen}
+                onOpenChange={setShortcutsHelpOpen}
+              />
               <ThemeToggle />
               <IconButton label="Source code on GitHub" asChild>
                 <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">
@@ -66,10 +79,11 @@ export function EditorPage() {
   );
 }
 
-/** The editor's keyboard shortcuts, which need the page's store. */
-function EditorShortcuts() {
+/** The editor's keyboard shortcuts, under the page's store; `?` shows them all. */
+function EditorShortcuts({ onShowShortcuts }: { onShowShortcuts: () => void }) {
   useUndoRedoShortcuts();
   useEditSelection();
+  useShowShortcutsShortcut(onShowShortcuts);
   return null;
 }
 
