@@ -1,12 +1,15 @@
+import { editor } from './editor';
 import { expect, test } from './fixtures';
 
 test.describe('smoke', () => {
   test('opens the editor with an empty canvas', async ({ page, expectNoA11yViolations }) => {
     await page.goto('/');
+    const { heading, canvas } = editor(page);
 
     await expect(page).toHaveTitle('Pipeline Builder');
-    await expect(page.getByRole('heading', { level: 1, name: 'Untitled pipeline' })).toBeVisible();
-    await expect(page.getByRole('main', { name: 'Pipeline canvas' })).toBeVisible();
+    await expect(heading).toHaveText('Untitled pipeline');
+    await expect(heading).toBeVisible();
+    await expect(canvas).toBeVisible();
     await expect(page.getByRole('button', { name: 'Zoom In' })).toBeVisible();
 
     await expectNoA11yViolations();
@@ -34,7 +37,7 @@ test.describe('smoke', () => {
     await expect(
       page.getByRole('heading', { name: 'Pipeline Builder needs a larger screen' }),
     ).toBeVisible();
-    await expect(page.getByRole('main', { name: 'Pipeline canvas' })).toBeHidden();
+    await expect(editor(page).canvas).toBeHidden();
 
     await expectNoA11yViolations();
   });

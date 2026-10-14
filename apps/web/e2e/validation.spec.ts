@@ -1,3 +1,4 @@
+import { editor } from './editor';
 import { expect, test } from './fixtures';
 
 test.describe('validation', () => {
@@ -6,35 +7,33 @@ test.describe('validation', () => {
     expectNoA11yViolations,
   }) => {
     await page.goto('/');
-    const palette = page.getByRole('complementary', { name: 'Node palette' });
-    const canvas = page.getByRole('main', { name: 'Pipeline canvas' });
-    const inspector = page.getByRole('complementary', { name: 'Inspector' });
-    const problems = inspector.getByRole('list', { name: 'Problems of the pipeline' });
-    // Nodes and edges are both groups. Names are exact: an edge is named after its nodes, and an
-    // edge with a problem also says what is wrong. React Flow renders an edge only when it can draw
-    // it to both handles, so an attached edge is a drawn one (a straight edge has no height, which
-    // `toBeVisible` would count as hidden).
-    const node = (name: string) => canvas.getByRole('group', { name, exact: true });
-    const edge = node;
-    const port = (nodeName: string, portName: string) =>
-      node(nodeName).getByRole('button', { name: portName });
+    const {
+      palette,
+      canvas,
+      node,
+      edge,
+      port,
+      inspector,
+      problemsSummary,
+      problems,
+      addNode,
+      connect,
+      select,
+    } = editor(page);
+    // A problem in the list: its severity, where it is and what is wrong.
     const problem = (name: string) => problems.getByRole('button', { name, exact: true });
-    const select = (nodeName: string) =>
-      node(nodeName).getByText(nodeName, { exact: true }).click();
 
     // A fresh editor has nothing to complain about.
-    await expect(inspector.getByRole('button', { name: 'Problems: none' })).toBeVisible();
+    await expect(problemsSummary).toHaveAccessibleName('Problems: none');
     await expect(inspector.getByText('No problems')).toBeVisible();
 
     for (const kind of ['Input', 'Prompt', 'LLM Call', 'Output']) {
-      await palette.getByRole('button', { name: `Add ${kind}` }).press('Enter');
+      await addNode(kind);
     }
     await expect(palette.getByRole('status')).toHaveText('Added Output 1');
 
     // Every node needs something: a value, its inputs connected, a path to the Output.
-    await expect(
-      inspector.getByRole('button', { name: 'Problems: 4 errors, 3 warnings' }),
-    ).toBeVisible();
+    await expect(problemsSummary).toHaveAccessibleName('Problems: 4 errors, 3 warnings');
     await expect(problem('Error: Input 1, Value: Required')).toBeVisible();
     await expect(problem('Error: Prompt 1, Input "question" is not connected')).toBeVisible();
     await expect(
@@ -58,16 +57,13 @@ test.describe('validation', () => {
 
     // Connect the chain; the whole pipeline then fits the canvas next to the inspector.
     await canvas.getByRole('button', { name: 'Fit View' }).click();
-    await port('Input 1', 'Output value (text)').click();
-    await port('Prompt 1', 'Input question (text)').click();
-    await port('Prompt 1', 'Output prompt (text)').click();
-    await port('LLM Call 1', 'Input prompt (text)').click();
-    await port('LLM Call 1', 'Output response (text)').click();
-    await port('Output 1', 'Input value (any)').click();
+    await connect(['Input 1', 'Output value (text)'], ['Prompt 1', 'Input question (text)']);
+    await connect(['Prompt 1', 'Output prompt (text)'], ['LLM Call 1', 'Input prompt (text)']);
+    await connect(['LLM Call 1', 'Output response (text)'], ['Output 1', 'Input value (any)']);
     await expect(edge('Input 1 value to Prompt 1 question')).toBeAttached();
     await expect(edge('Prompt 1 prompt to LLM Call 1 prompt')).toBeAttached();
     await expect(edge('LLM Call 1 response to Output 1 value')).toBeAttached();
-    await expect(inspector.getByRole('button', { name: 'Problems: none' })).toBeVisible();
+    await expect(problemsSummary).toHaveAccessibleName('Problems: none');
 
     // Removing a template variable removes its input, but its edge stays, drawn to a placeholder
     // and reported, until the variable is back.
@@ -97,7 +93,7 @@ test.describe('validation', () => {
     await temperature.fill('0.7');
     await expect(temperature).not.toHaveAccessibleDescription(/Must be from 0 to 2/);
 
-    await expect(inspector.getByRole('button', { name: 'Problems: none' })).toBeVisible();
+    await expect(problemsSummary).toHaveAccessibleName('Problems: none');
     await expect(inspector.getByText('No problems')).toBeVisible();
     await expect(node('LLM Call 1')).not.toHaveAccessibleDescription(/problem/);
     await expectNoA11yViolations();
