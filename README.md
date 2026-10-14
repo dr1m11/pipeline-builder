@@ -26,7 +26,7 @@ Available now:
 - Keyboard shortcuts, all listed in a help dialog that opens on `?`
 - Autosave in the browser: the pipeline is restored when you come back
 - JSON import / export with a schema version: files saved by an older version are updated by a chain of migrations (v1 → v2) as they open
-- Three built-in templates and a blank pipeline, from the New menu or the empty canvas
+- Three built-in templates, offered on the empty canvas and in the New menu, which also starts a blank pipeline
 - Light/dark themes without a flash, desktop-only gate
 - UI kit on Radix primitives and design tokens, documented in Storybook
 - Every pull request gets its own preview deployment
