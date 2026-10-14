@@ -3,6 +3,7 @@ import { CodeXml } from 'lucide-react';
 
 import { PipelineStoreProvider, usePipelineStore } from '@/entities/pipeline';
 import { NodePalette, useNodeDrop } from '@/features/add-node';
+import { useEditSelection } from '@/features/edit-selection';
 import { ExportButton, ImportButton } from '@/features/import-export';
 import { ThemeToggle } from '@/features/toggle-theme';
 import { UndoRedoButtons, useUndoRedoShortcuts } from '@/features/undo-redo';
@@ -66,6 +67,7 @@ export function EditorPage() {
 /** The editor's keyboard shortcuts, which need the page's store. */
 function EditorShortcuts() {
   useUndoRedoShortcuts();
+  useEditSelection();
   return null;
 }
 

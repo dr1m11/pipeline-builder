@@ -26,6 +26,16 @@ const NODE_TYPES = { [PIPELINE_NODE_TYPE]: PipelineNodeView } satisfies NodeType
 const DELETE_KEYS = ['Backspace', 'Delete'];
 
 /**
+ * Ends a text selection elsewhere on the page, as pressing any other content does. Nothing on the
+ * canvas can be selected as text, and Chrome keeps the old selection when such an element is
+ * pressed; Ctrl+C would then copy that text instead of the nodes just selected.
+ */
+function clearTextSelection(): void {
+  const selection = document.getSelection();
+  if (selection !== null && !selection.isCollapsed) selection.removeAllRanges();
+}
+
+/**
  * The pipeline from the surrounding store on a React Flow canvas. React Flow is a controlled view:
  * it reports changes, the store applies them through core operations, and the canvas re-renders
  * from the store (see docs/adr/0006).
@@ -90,6 +100,7 @@ export function PipelineCanvas() {
       onConnect={onConnect}
       deleteKeyCode={DELETE_KEYS}
       fitView={fitView}
+      onPointerDownCapture={clearTextSelection}
     >
       <Background />
       <Controls />

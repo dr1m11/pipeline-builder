@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useShortcuts } from './use-shortcuts';
+import { ownsKeys, useShortcuts } from './use-shortcuts';
 
 const undo = vi.fn();
 const redo = vi.fn();
@@ -146,5 +146,20 @@ describe('useShortcuts', () => {
     await user.keyboard('{Control>}z{/Control}');
 
     expect(undo).not.toHaveBeenCalled();
+  });
+});
+
+describe('ownsKeys', () => {
+  it('tells elements that keep their keys from the rest of the page', () => {
+    render(<Editor />);
+
+    expect(ownsKeys(screen.getByRole('textbox', { name: 'Name' }))).toBe(true);
+    expect(ownsKeys(screen.getByRole('textbox', { name: 'Notes' }))).toBe(true);
+    expect(ownsKeys(screen.getByRole('button', { name: 'Close' }))).toBe(true);
+    expect(ownsKeys(screen.getByRole('button', { name: 'Zoom' }))).toBe(true);
+    expect(ownsKeys(screen.getByRole('button', { name: 'Run' }))).toBe(false);
+    expect(ownsKeys(screen.getByRole('combobox', { name: 'Operation' }))).toBe(false);
+    expect(ownsKeys(document)).toBe(false);
+    expect(ownsKeys(null)).toBe(false);
   });
 });

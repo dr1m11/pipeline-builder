@@ -56,7 +56,12 @@ export function useShortcuts(bindings: readonly ShortcutBinding[]): void {
   }, []);
 }
 
-function ownsKeys(target: EventTarget | null): boolean {
+/**
+ * Whether keys pressed on `target` belong to it rather than to the page: it edits text (a text
+ * input, a textarea, an editable element), or it is in a dialog, a menu or a `.nokey` element.
+ * Clipboard shortcuts pressed there keep the browser's behaviour too.
+ */
+export function ownsKeys(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   return editsText(target) || target.closest(OWNS_KEYS) !== null;
 }

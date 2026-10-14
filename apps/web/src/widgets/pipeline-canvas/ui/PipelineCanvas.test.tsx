@@ -5,7 +5,7 @@ import {
   type NodeKind,
   type Pipeline,
 } from '@pipeline-builder/core';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ReactFlowProvider, useViewport } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';
@@ -161,6 +161,25 @@ describe('PipelineCanvas', () => {
     await activatePort(user, 'Output 1', 'Input value (any)');
 
     expect(port('LLM Call 1', 'Input prompt (text)')).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('ends a text selection elsewhere on the page when it is pressed', async () => {
+    render(
+      <PipelineStoreProvider store={createPipelineStore(chain())}>
+        <p>Text selected before</p>
+        <div style={{ width: 1200, height: 600 }}>
+          <PipelineCanvas />
+        </div>
+      </PipelineStoreProvider>,
+    );
+    const node = await screen.findByRole('group', { name: 'Input 1' });
+    document.getSelection()?.selectAllChildren(screen.getByText('Text selected before'));
+
+    // user-event would move the selection to the pressed point itself, as the browser does on text
+    // that can be selected; nothing on the canvas can be, so the press alone must clear it.
+    fireEvent.pointerDown(node);
+
+    expect(document.getSelection()?.isCollapsed).toBe(true);
   });
 });
 
