@@ -14,6 +14,13 @@ export {
   type ReplacePipelineCommand,
   type UpdateNodeDataCommand,
 } from './commands/pipeline-command';
+export {
+  type EvaluableNode,
+  evaluateNode,
+  type EvaluationErrorCode,
+  type NodeEvaluationError,
+  type NodeValues,
+} from './engine/evaluate-node';
 export { type Position } from './geometry';
 export {
   connect,
@@ -117,7 +124,7 @@ export {
 } from './ports';
 export { type Err, err, type Ok, ok, type Result } from './result';
 export { SCHEMA_VERSION } from './schema-version';
-export { extractTemplateVariables } from './template';
+export { extractTemplateVariables, renderTemplate } from './template';
 export {
   type CycleIssue,
   type DanglingEdgeIssue,

@@ -66,6 +66,9 @@ describe('INPUT_RULES_SCHEMA', () => {
     ['number', 'Infinity', 'Must be a number'],
     ['json', '{question: 1}', 'Must be valid JSON'],
     ['json', '[1,', 'Must be valid JSON'],
+    // `JSON.parse` reads these as `Infinity`, which is not a JSON value.
+    ['json', '1e999', 'Must be valid JSON'],
+    ['json', '[1e999]', 'Must be valid JSON'],
   ])('rejects the %s value %j', (valueType, value, message) => {
     expect(ruleMessages({ valueType, value })).toEqual({ value: [message] });
   });

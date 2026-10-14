@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import { parseJson } from '../persistence/json';
 import type { NodePorts } from '../ports';
 import { isBlank, NUMBER_MESSAGE, REQUIRED_MESSAGE } from './field-rules';
 import type { NodeDefinition } from './node-definition';
@@ -25,22 +26,14 @@ export const INPUT_DATA_SCHEMA = z.object({
 const VALUE_CHECKS: Readonly<Record<InputValueType, (value: string) => string | null>> = {
   text: () => null,
   number: (value) => (Number.isFinite(Number(value)) ? null : NUMBER_MESSAGE),
-  json: (value) => (parsesAsJson(value) ? null : 'Must be valid JSON'),
+  // The run reads the value with the same parser, so whatever passes here also parses there.
+  json: (value) => (parseJson(value) === undefined ? 'Must be valid JSON' : null),
 };
 
 export const INPUT_RULES_SCHEMA = INPUT_DATA_SCHEMA.superRefine(({ valueType, value }, ctx) => {
   const message = isBlank(value) ? REQUIRED_MESSAGE : VALUE_CHECKS[valueType](value);
   if (message !== null) ctx.addIssue({ code: 'custom', message, path: ['value'] });
 });
-
-function parsesAsJson(value: string): boolean {
-  try {
-    JSON.parse(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function portsFor(valueType: InputValueType): NodePorts {
   return {
