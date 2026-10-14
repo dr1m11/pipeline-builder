@@ -2,7 +2,7 @@ import * as z from 'zod';
 
 import { REQUIRED_MESSAGE } from '../nodes/field-rules';
 import { NODE_LABEL_SCHEMA } from '../nodes/node-label';
-import { NODE_DEFINITIONS, type NodeKind } from '../nodes/registry';
+import { NODE_DEFINITIONS, NODE_KINDS, type NodeKind } from '../nodes/registry';
 import {
   parsePipelineName,
   type Pipeline,
@@ -38,15 +38,25 @@ function nodeSchema<K extends NodeKind>(kind: K) {
   });
 }
 
-// One option per kind in `NODE_KINDS`; the round-trip test fails while a kind is missing.
+type NodeSchema<K extends NodeKind> = ReturnType<typeof nodeSchema<K>>;
+
+// One schema per kind; the compiler fails while a kind is missing.
+const NODE_SCHEMAS: { readonly [K in NodeKind]: NodeSchema<K> } = {
+  input: nodeSchema('input'),
+  prompt: nodeSchema('prompt'),
+  'llm-call': nodeSchema('llm-call'),
+  transform: nodeSchema('transform'),
+  condition: nodeSchema('condition'),
+  output: nodeSchema('output'),
+};
+
+// The union needs at least one option, so the first kind is taken apart from the rest.
+const [FIRST_KIND, ...OTHER_KINDS] = NODE_KINDS;
+
 // An unknown kind fails with "Invalid discriminator value. Expected 'input' | 'prompt' | …".
 const NODE_SCHEMA = z.discriminatedUnion('kind', [
-  nodeSchema('input'),
-  nodeSchema('prompt'),
-  nodeSchema('llm-call'),
-  nodeSchema('transform'),
-  nodeSchema('condition'),
-  nodeSchema('output'),
+  NODE_SCHEMAS[FIRST_KIND],
+  ...OTHER_KINDS.map((kind) => NODE_SCHEMAS[kind]),
 ]);
 
 const EDGE_SCHEMA = z.object({

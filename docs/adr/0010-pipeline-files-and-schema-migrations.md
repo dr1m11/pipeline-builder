@@ -42,7 +42,7 @@ Earlier decisions constrain the format. [ADR 0005](./0005-node-catalogue-and-typ
 | 2    | Checks the marker and that `schemaVersion` is a whole number from 1, not newer than the app's | `not-a-pipeline`, `newer-version`                   |
 | 3    | Runs the migrations from the file's version up to the current one                             | — (a gap in the chain is a bug and throws)          |
 | 4    | Checks the document with a Zod schema built from each kind's `dataSchema`                     | `invalid-pipeline` with the path of the first issue |
-| 5    | Checks ids and repairs edges the editor could not show                                        | `duplicate-id`                                      |
+| 5    | Checks ids and repairs edges the editor could not show or keep                                | `duplicate-id`                                      |
 
 **Version rules.** `schemaVersion` is a whole number. Any change to the persisted shape bumps it and adds a migration `{ from, migrate }` that turns a raw JSON document of version `from` into version `from + 1`. Migrations run one step at a time on raw JSON, before Zod, so the schema only ever describes the current version and each migration only knows its two neighbours. A file from a newer version is refused rather than loaded in part. Migrations are append-only: a released one is never changed or removed, and each comes with a fixture test, a file saved in the old version.
 
@@ -59,6 +59,13 @@ Repairs are returned with the pipeline (`{ edgeId, reason }`) so the app can tel
 
 **Core stays free of I/O.** Core turns text into a pipeline and back. The web app reads and downloads files, owns the `localStorage` keys and handles clipboard events.
 
+## Migrations
+
+Every change to the persisted shape, oldest first; each row is one entry of `MIGRATIONS` in `packages/core/src/persistence/migrations.ts`. Version 1 is the first persisted shape: the node catalogue of [ADR 0005](./0005-node-catalogue-and-typed-ports.md) with the data fields of [ADR 0007](./0007-zod-schemas-for-node-data-in-core.md). There are no migrations yet.
+
+| From | To  | Change |
+| ---- | --- | ------ |
+
 ## Consequences
 
 - Files from every released version keep loading, so migrations are never removed and the chain only grows. A test checks that there is exactly one migration from every version below the current one.
@@ -66,7 +73,7 @@ Repairs are returned with the pipeline (`{ edgeId, reason }`) so the app can tel
 - An invalid file reports one problem with its path (`nodes[2].data.temperature`): enough to find a hand-editing mistake, not a full report.
 - Fields the format does not define are lost when a file is opened and saved again.
 - The autosaved draft goes through the same parser, so a draft written before a deploy that bumps the version is migrated on the next load.
-- Version 2 lands in [#61](https://github.com/dr1m11/pipeline-builder/issues/61): a `provider` field on LLM Call nodes with a migration from version 1, tested against a real version 1 export from production.
+- Version 2 lands in [#61](https://github.com/dr1m11/pipeline-builder/issues/61): a `provider` field on LLM Call nodes with a migration from version 1, tested against a real version 1 export from production. It adds the first row to [Migrations](#migrations).
 
 ## Alternatives considered
 

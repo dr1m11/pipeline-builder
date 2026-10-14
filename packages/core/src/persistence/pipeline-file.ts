@@ -24,8 +24,8 @@ export type PipelineFileError =
   | { readonly code: 'duplicate-id'; readonly element: 'node' | 'edge'; readonly id: string };
 
 /**
- * An edge dropped while loading because the editor could not show it: it starts or ends at a node
- * that is not in the file, or it goes into an input that an earlier edge already takes.
+ * An edge dropped while loading because the editor could not show or keep it: it starts or ends at
+ * a node that is not in the file, or it goes into an input that an earlier edge already takes.
  */
 export interface PipelineFileRepair {
   readonly edgeId: string;
@@ -70,8 +70,8 @@ export function serializePipeline(pipeline: Pipeline): string {
  * Reads the text of a pipeline file (an export, the autosaved draft or the clipboard). Files of an
  * older schema version are migrated one version at a time; newer ones are refused. Node data is
  * checked against each kind's `dataSchema` only, so unfinished nodes load and validation reports
- * them; unknown fields are dropped. Edges the editor could not show are dropped and listed in
- * `repairs`, while edges to a port that no longer exists are kept for validation to report.
+ * them; unknown fields are dropped. Edges the editor could not show or keep are dropped and listed
+ * in `repairs`, while edges to a port that no longer exists are kept for validation to report.
  * See docs/adr/0010-pipeline-files-and-schema-migrations.md.
  */
 export function parsePipelineFile(
