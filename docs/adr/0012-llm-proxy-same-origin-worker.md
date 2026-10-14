@@ -18,17 +18,39 @@ The API sends no CORS headers and answers a preflight with 404, so pages on othe
 **Routes.**
 
 - `GET /api/health` answers `{ "ok": true }`.
-- `POST /api/llm/stream` takes an `LlmRequest` as JSON (`Content-Type: application/json`, which a cross-site form cannot send) and checks it with `LLM_REQUEST_SCHEMA`. The body may be at most 845 KB: two prompts of `LLM_PROMPT_MAX_LENGTH` characters with a margin of 4 bytes per character, plus the other fields. Real text fits (UTF-8 takes up to 3 bytes per character), though a prompt made of characters JSON escapes, at 6 bytes each, may not.
-- An error before streaming starts is an `LlmErrorResponse`, `{ "error": { "code", "message" } }`: 400 for a bad body, 413 for a body over the limit, 429 for a rate limit (404 for an unknown API path, 500 for an unexpected failure).
+- `POST /api/llm/stream` takes an `LlmRequest` as JSON (`Content-Type: application/json`, which a cross-site form cannot send) and checks it with `LLM_REQUEST_SCHEMA`. The body may be at most 845 KB: two prompts of `LLM_PROMPT_MAX_LENGTH` characters with a margin of 4 bytes per character, plus the other fields. Real text fits (UTF-8 takes up to 3 bytes per character), though a prompt made of characters JSON escapes, at 6 bytes each, may not. The model id, which goes upstream as it is, may be at most `LLM_MODEL_MAX_LENGTH` (200) characters.
+- An error before streaming starts is an `LlmErrorResponse`, `{ "error": { "code", "message" } }`: 400 for a bad body, 401 `invalid-key` for a provider that needs a key and got none, 413 for a body over the limit, 429 for a rate limit (404 for an unknown API path, 500 for an unexpected failure).
 - Otherwise the answer is `text/event-stream`: `formatLlmStreamEvent` events, the text as `token`s and then `done`, or an `error` event once the status has been sent. Every stream ends with `done` or `error` unless the client disconnects. An `LlmError` from a provider keeps its code and message; any other error becomes `upstream-error` with a generic message, and the proxy never sends `network`, which belongs to the client.
 
-**Providers.** A provider streams text chunks for a request and stops when its `AbortSignal` aborts; the signal aborts when the client disconnects (Hono's `stream.onAbort`), so an upstream request is cancelled too. The mock streams `mockCompletion` in `splitIntoTokens` chunks with a 40 ms pause before each (the pause is an option of `createMockProvider`; tests use 0) and needs no key. Anthropic and OpenAI answer with a `bad-request` error event ("… is not available yet") until their adapters land in [#81](https://github.com/dr1m11/pipeline-builder/issues/81).
+**Providers.** A provider streams text chunks for a request and stops when its `AbortSignal` aborts; the signal aborts when the client disconnects (Hono's `stream.onAbort`), so an upstream request is cancelled too. The mock streams `mockCompletion` in `splitIntoTokens` chunks with a 40 ms pause before each (the pause is an option of `createMockProvider`; tests use 0) and needs no key.
+
+Anthropic and OpenAI ([#81](https://github.com/dr1m11/pipeline-builder/issues/81)) share one adapter core, `createUpstreamProvider`: it posts the request with `fetch` (an option, so tests pass a fake), reads the body as UTF-8 server-sent events with core's `createSseParser`, and lets a reader per provider turn each event into text, the end of the answer, an error, or nothing (pings, thinking, metadata, events added later). The request shapes, checked against the providers' documentation in October 2026:
+
+|                             | Anthropic                                              | OpenAI                                                |
+| --------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
+| API                         | Messages: `POST https://api.anthropic.com/v1/messages` | Responses: `POST https://api.openai.com/v1/responses` |
+| Key                         | `x-api-key`, with `anthropic-version: 2023-06-01`      | `Authorization: Bearer`                               |
+| Prompt                      | `messages: [{ "role": "user", "content": prompt }]`    | `input: prompt`                                       |
+| System prompt, unless blank | `system`                                               | `instructions`                                        |
+| Max tokens                  | `max_tokens`                                           | `max_output_tokens`, at least 16 (the API's minimum)  |
+| Thinking                    | `output_config: { "effort": "low" }`                   | `reasoning: { "effort": "low" }`                      |
+| Also                        | `stream: true`                                         | `stream: true`, `store: false`                        |
+| Text                        | `content_block_delta` with a `text_delta`              | `response.output_text.delta`                          |
+| End                         | `message_stop`                                         | `response.completed` or `response.incomplete`         |
+| Errors in the stream        | `error` event, by `error.type`                         | `error` event or `response.failed`, by error code     |
+
+- **Low effort.** Both default models think before they answer: Claude Haiku 5.5 has adaptive thinking on by default and GPT-6 Luna is a reasoning model, both at medium effort by default. Thinking counts towards the max tokens, so the adapters ask for low effort and leave most of the budget to the answer; thinking deltas and reasoning items are skipped.
+- **No temperature.** Current Claude models (4.7 and later, Haiku 5.5 included) answer 400 to any temperature but the default, and GPT-6 models take `temperature` only with reasoning effort `none`. The adapters do not send the node's temperature.
+- **Endings.** An answer stopped by the token limit ends with the text that fits (`done`); one stopped before any text (thinking used the whole budget) is `bad-request`, "… used up Max tokens before writing an answer". A refusal (Anthropic's `stop_reason: "refusal"`, OpenAI's content filter) is `bad-request` too. A body that ends before the end event, or a connection that breaks off, is `upstream-error`.
+- **Errors.** An HTTP error status maps to a code: 401 and 403 to `invalid-key`, 429 to `rate-limited`, other 4xx to `bad-request`, 5xx (and Anthropic's 529 "overloaded") to `upstream-error`; a provider that cannot be reached is `upstream-error` too. Errors in the stream map the same way: Anthropic's error types by their documented status, OpenAI's codes and types by meaning (`rate_limit_exceeded` and `insufficient_quota`, `invalid_api_key`, `invalid_prompt` and `invalid_request_error`). The messages are fixed per code and name the provider, the HTTP status and the provider's error type if it looks like one (lowercase words joined by underscores). An upstream message is never quoted, nor kept as a cause: it can repeat the request, and OpenAI's 401 repeats the key.
+- **Timeouts.** No text within 30 seconds of the request, or no end of the answer within 5 minutes, aborts the upstream request and ends the stream with `timeout`; text already streamed stays. Both limits are options of the adapters. The stream endpoint also writes an SSE comment (`: ping`) every 15 seconds, which clients skip, so proxies and browsers do not close a stream that is quiet while a model thinks.
 
 **API keys.** The client sends the user's key only for a provider that needs one (`LLM_PROVIDER_INFO`), only in the `Authorization: Bearer <key>` header of `POST /api/llm/stream`, never in a URL or the JSON body. The proxy:
 
-- forwards the key only to the API of the provider the request names (#81) and ignores it for the mock;
+- reads the key only for a provider that needs one, answers 401 `invalid-key` without calling upstream when it is missing or blank, and checks the stricter rate limit only after that;
+- forwards the key only in the headers of the request to the API of the provider the request names, and never gives it to the mock;
 - never stores it: no KV, Durable Objects, cache or other persistence;
-- never logs it: nothing logs request headers or bodies; the only log line, for an unexpected error, holds the error's name, the method and the path, and errors from upstream are not echoed unless an adapter wrote the `LlmError` message itself;
+- never logs it: nothing logs request headers or bodies; the only log line, for an unexpected error, holds the error's name, the method and the path; adapters write every error message themselves and never quote an upstream one;
 - marks every API response `Cache-Control: no-store`.
 
 **Limits and headers.** Two rate limiting bindings, keyed by `cf-connecting-ip`: `LLM_RATE_LIMITER` (30 requests per 10 seconds) counts every LLM request, before the body is read, so bad requests count too; `REAL_PROVIDER_RATE_LIMITER` (20 per 60 seconds) also counts requests to a provider that needs a key, since those call a real model. Exceeding either gives 429 `rate-limited`. `_headers` applies only to static assets, so API responses set their own security headers with Hono's `secureHeaders` (`default-src 'none'`, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `Cross-Origin-Resource-Policy: same-origin`, `Referrer-Policy: no-referrer`).
@@ -45,6 +67,10 @@ Runtime and binding types come from `wrangler types` (`apps/proxy/worker-configu
 - Rate limit counters are kept per Cloudflare location and are eventually consistent: a guard against abuse, not an exact quota. Users behind one IP address share it.
 - Types follow `wrangler.jsonc` and the installed `wrangler` without a manual step; after editing `wrangler.jsonc`, `pnpm --filter @pipeline-builder/proxy cf-typegen` (or the next install or typecheck) updates them for the editor. An install with `--ignore-scripts` leaves them out, and then lint and `tsc` fail until `cf-typegen` runs.
 - `wrangler dev` prints `Network connection lost` when a client disconnects mid-stream; that is the runtime reporting the disconnect, after which the proxy stops the provider.
+- The LLM Call node's temperature has no effect on Anthropic and OpenAI, whose current models refuse it; the node form still offers it.
+- Low effort is accepted by every current model of both providers, but not by some older ones (Claude Haiku 4.5, for one, has no effort parameter): such a model answers 400, reported as `bad-request` with its error type.
+- Upstream error messages are not shown, so the user sees the status and the error type (such as `invalid_request_error`) rather than the provider's explanation.
+- The SSE fixtures of the adapter tests follow the providers' documented example streams and error bodies; no key was available to record live ones, so the first live run may still show differences.
 
 ## Alternatives considered
 
@@ -53,3 +79,7 @@ Runtime and binding types come from `wrangler types` (`apps/proxy/worker-configu
 - **The key in the JSON body** — easier to log or persist by mistake together with the request; the `Authorization` header is where keys normally travel and where logging tools expect to redact them.
 - **Rate limits in KV or a Durable Object** — exact, but slower and more code; the built-in rate limiting binding is enough to stop abuse.
 - **Committing the generated types** with a Renovate rule that keeps `wrangler` updates from merging themselves — works, but every update then needs a manual regeneration; generating on install needs none.
+- **OpenAI Chat Completions** — streams GPT-6 Luna too (`choices[0].delta.content`, ending with `data: [DONE]`), but the Responses API is OpenAI's primary one, names every event, ends with an explicit `response.completed`, `response.incomplete` or `response.failed`, takes the system prompt as `instructions`, and `store: false` keeps the response off OpenAI's storage.
+- **Reasoning effort `none` with the temperature for OpenAI** — would honour the node's temperature on GPT-6 Luna, but GPT-6 Astra and GPT-6.1 Sol do not support `none`, and Claude has no such option; a table of models and their parameters would have to be kept up to date.
+- **Turning Claude's thinking off (`thinking: { "type": "disabled" }`)** — Claude Haiku 5.5 accepts it, but Claude Opus 5.5 and Fable 5.1 answer 400 and Sonnet 5.5 wants `between_tools`; low effort works on all of them.
+- **Quoting upstream error messages** — more helpful ("model not found"), but they can repeat the request and, for OpenAI's 401, part of the key; the status and the error type are enough to act on.
