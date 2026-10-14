@@ -11,7 +11,7 @@
     "node": ">=24.15.0"
   },
   "scripts": {
-    "dev": "pnpm --filter @pipeline-builder/web dev",
+    "dev": "pnpm --parallel --filter @pipeline-builder/web --filter @pipeline-builder/proxy dev",
     "build": "pnpm --filter @pipeline-builder/web build",
     "preview": "pnpm --filter @pipeline-builder/web preview",
     "storybook": "pnpm --filter @pipeline-builder/web storybook",
@@ -21,9 +21,9 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fsd": "pnpm --filter @pipeline-builder/web lint:fsd",
     "typecheck": "tsc -p tsconfig.json && pnpm -r --if-present typecheck",
-    "test": "vitest run --project core --project web",
-    "test:watch": "vitest --project core --project web",
-    "test:coverage": "vitest run --project core --project web --coverage",
+    "test": "vitest run --project core --project proxy --project web",
+    "test:watch": "vitest --project core --project proxy --project web",
+    "test:coverage": "vitest run --project core --project proxy --project web --coverage",
     "test:storybook": "vitest run --project storybook",
     "test:e2e": "pnpm --filter @pipeline-builder/web test:e2e",
     "test:hooks": "node --test \".claude/hooks/*.test.mjs\"",

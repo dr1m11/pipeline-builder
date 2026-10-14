@@ -1,0 +1,21 @@
+{
+  "name": "@pipeline-builder/proxy",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pipeline Builder LLM proxy: a Hono app on Cloudflare Workers that streams responses over SSE",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "node -e \"process.getBuiltinModule('node:fs').mkdirSync('../web/dist', { recursive: true })\" && wrangler dev",
+    "cf-typegen": "wrangler types",
+    "typecheck": "wrangler types --check && tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@pipeline-builder/core": "workspace:*",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "wrangler": "4.149.0"
+  }
+}
