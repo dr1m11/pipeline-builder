@@ -90,6 +90,20 @@ const PORTS: NodePorts = {
   outputs: [{ id: 'response', label: 'response', type: 'text', required: false }],
 };
 
+/** Titles of the providers that need the user's API key, as a list ("Anthropic or OpenAI"). */
+const KEYED_PROVIDERS = orList(
+  LLM_PROVIDERS.filter((provider) => LLM_PROVIDER_INFO[provider].needsApiKey).map(
+    (provider) => LLM_PROVIDER_INFO[provider].title,
+  ),
+);
+
+/** "A", "A or B", "A, B or C". */
+function orList(items: readonly string[]): string {
+  return [items.slice(0, -1).join(', '), ...items.slice(-1)]
+    .filter((part) => part !== '')
+    .join(' or ');
+}
+
 /** Sends a prompt to a language model and returns its response. */
 export const LLM_CALL_DEFINITION: NodeDefinition<LlmCallNodeData> = {
   title: 'LLM Call',
@@ -101,8 +115,7 @@ export const LLM_CALL_DEFINITION: NodeDefinition<LlmCallNodeData> = {
   fields: {
     provider: {
       label: 'Provider',
-      description:
-        'Mock streams sample text. Anthropic and OpenAI use your API key, which is sent only to this app’s own proxy.',
+      description: `Mock streams sample text. Your API key for ${KEYED_PROVIDERS} is sent only to this app’s own proxy.`,
       optionLabels: Object.fromEntries(
         LLM_PROVIDERS.map((provider) => {
           const { title, needsApiKey } = LLM_PROVIDER_INFO[provider];
@@ -113,7 +126,7 @@ export const LLM_CALL_DEFINITION: NodeDefinition<LlmCallNodeData> = {
     model: {
       label: 'Model',
       description:
-        'The provider’s model id; switching the provider picks its default. Mock accepts any.',
+        'The provider’s model id. Switching the provider replaces a blank or default model with the new provider’s default. Mock accepts any.',
     },
     temperature: {
       label: 'Temperature',

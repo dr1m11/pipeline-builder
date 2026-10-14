@@ -132,12 +132,20 @@ describe('LLM_CALL_DEFINITION', () => {
     expect(LLM_CALL_DEFINITION.fields.provider).toEqual({
       label: 'Provider',
       description:
-        'Mock streams sample text. Anthropic and OpenAI use your API key, which is sent only to this app’s own proxy.',
+        'Mock streams sample text. Your API key for Anthropic or OpenAI is sent only to this app’s own proxy.',
       optionLabels: {
         mock: 'Mock (no API key)',
         anthropic: 'Anthropic (your API key)',
         openai: 'OpenAI (your API key)',
       },
+    });
+  });
+
+  it('says which models follow a provider switch', () => {
+    expect(LLM_CALL_DEFINITION.fields.model).toEqual({
+      label: 'Model',
+      description:
+        'The provider’s model id. Switching the provider replaces a blank or default model with the new provider’s default. Mock accepts any.',
     });
   });
 

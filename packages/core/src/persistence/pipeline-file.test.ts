@@ -599,7 +599,7 @@ describe('parsePipelineFile', () => {
 
     expect(parsePipelineFile(text, versionTwoBuild)).toEqual({
       ok: false,
-      error: { code: 'newer-version', version: 3 },
+      error: { code: 'newer-version', version: SCHEMA_VERSION },
     });
   });
 

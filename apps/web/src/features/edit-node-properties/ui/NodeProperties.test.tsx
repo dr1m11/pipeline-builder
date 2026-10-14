@@ -76,7 +76,7 @@ describe('NodeProperties', () => {
         .map((option) => option.textContent),
     ).toEqual(['Mock (no API key)', 'Anthropic (your API key)', 'OpenAI (your API key)']);
     expect(provider).toHaveAccessibleDescription(
-      'Mock streams sample text. Anthropic and OpenAI use your API key, which is sent only to this app’s own proxy.',
+      'Mock streams sample text. Your API key for Anthropic or OpenAI is sent only to this app’s own proxy.',
     );
   });
 
