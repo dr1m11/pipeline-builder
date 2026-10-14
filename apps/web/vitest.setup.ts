@@ -103,4 +103,8 @@ Object.defineProperty(window, 'matchMedia', {
 // Vitest globals are off, so Testing Library cannot register its own cleanup.
 afterEach(() => {
   cleanup();
+  // Each test starts without an autosaved draft. The keys are spelled out because a module imported
+  // here could no longer be mocked by a test; they must match entities/pipeline/api/draft-storage.ts.
+  window.localStorage.removeItem('pb:pipeline');
+  window.localStorage.removeItem('pb:pipeline:unreadable');
 });

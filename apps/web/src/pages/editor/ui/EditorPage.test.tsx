@@ -1,14 +1,32 @@
-import { NODE_DEFINITIONS } from '@pipeline-builder/core';
+import {
+  addNode,
+  connect,
+  createEmptyPipeline,
+  NODE_DEFINITIONS,
+  parsePipelineFile,
+  serializePipeline,
+} from '@pipeline-builder/core';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DRAFT_STORAGE_KEY, UNREADABLE_DRAFT_STORAGE_KEY } from '@/entities/pipeline';
+import { ToastProvider } from '@/shared/ui/toast';
 import { TooltipProvider } from '@/shared/ui/tooltip';
 
 import { EditorPage } from './EditorPage';
 
+function Providers({ children }: { children: ReactNode }) {
+  return (
+    <TooltipProvider>
+      <ToastProvider>{children}</ToastProvider>
+    </TooltipProvider>
+  );
+}
+
 function renderPage() {
-  render(<EditorPage />, { wrapper: TooltipProvider });
+  render(<EditorPage />, { wrapper: Providers });
   return { user: userEvent.setup() };
 }
 
@@ -24,6 +42,37 @@ async function activatePort(
     port.focus();
   });
   await user.keyboard('{Enter}');
+}
+
+function notifications() {
+  return within(screen.getByRole('region', { name: 'Notifications (F8)' }));
+}
+
+/** The pipeline in the autosaved draft, or null when there is none. */
+function savedPipeline() {
+  const text = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+  if (text === null) return null;
+  const parsed = parsePipelineFile(text);
+  if (!parsed.ok) throw new Error(`The draft cannot be read: ${parsed.error.code}`);
+  return parsed.value.pipeline;
+}
+
+/** "Ask a question": Input → Prompt. */
+function askPipeline() {
+  let pipeline = createEmptyPipeline({ id: 'saved', name: 'Ask a question' });
+  pipeline = addNode(pipeline, { kind: 'input', id: 'input', position: { x: 0, y: 0 } }).pipeline;
+  pipeline = addNode(pipeline, {
+    kind: 'prompt',
+    id: 'prompt',
+    position: { x: 320, y: 40 },
+  }).pipeline;
+  const result = connect(
+    pipeline,
+    { source: 'input', sourcePort: 'value', target: 'prompt', targetPort: 'question' },
+    'input-prompt',
+  );
+  if (!result.ok) throw new Error(`Cannot connect: ${result.error}`);
+  return result.value.pipeline;
 }
 
 describe('EditorPage', () => {
@@ -230,5 +279,77 @@ describe('EditorPage undo and redo', () => {
     expect(name).toHaveValue('Prompt 1 draft');
     expect(screen.getByRole('group', { name: 'Prompt 1 draft' })).toBeInTheDocument();
     expect(undoButton('Rename Prompt 1')).toBeEnabled();
+  });
+});
+
+describe('EditorPage autosave', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('opens the pipeline saved in this browser', async () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, serializePipeline(askPipeline()));
+
+    renderPage();
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Ask a question' })).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Input 1' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Prompt 1' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('group', { name: 'Input 1 value to Prompt 1 question' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Drag a node from the palette, or click one, to start your pipeline.'),
+    ).not.toBeInTheDocument();
+    // The saved pipeline is where editing starts, not a change to undo.
+    const toolbar = screen.getByRole('toolbar', { name: 'Edit' });
+    expect(within(toolbar).getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
+  it('saves the pipeline shortly after an edit', async () => {
+    const { user } = renderPage();
+
+    await user.click(screen.getByRole('button', { name: 'Add Input' }));
+
+    await waitFor(() => {
+      expect(savedPipeline()?.nodes.map((node) => node.label)).toEqual(['Input 1']);
+    });
+    expect(savedPipeline()?.name).toBe('Untitled pipeline');
+  });
+
+  it('starts empty and says so when the saved pipeline cannot be read', () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, '{"format": "pipeline-builder"');
+
+    renderPage();
+
+    expect(
+      screen.getByText('Drag a node from the palette, or click one, to start your pipeline.'),
+    ).toBeInTheDocument();
+    const toast = notifications().getByRole('listitem');
+    expect(toast).toHaveTextContent('Couldn’t restore your last pipeline');
+    expect(toast).toHaveTextContent('A copy of the saved data was kept in this browser.');
+    expect(window.localStorage.getItem(UNREADABLE_DRAFT_STORAGE_KEY)).toBe(
+      '{"format": "pipeline-builder"',
+    );
+  });
+
+  it('says once when storage is full', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    const { user } = renderPage();
+
+    await user.click(screen.getByRole('button', { name: 'Add Input' }));
+    const toast = await notifications().findByRole('listitem');
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+    await waitFor(() => {
+      expect(setItem).toHaveBeenCalledTimes(2);
+    });
+
+    expect(notifications().getAllByRole('listitem')).toEqual([toast]);
+    expect(toast).toHaveTextContent('Couldn’t save your changes');
+    expect(toast).toHaveTextContent(
+      'Browser storage is full, so changes are no longer saved in this browser.',
+    );
   });
 });

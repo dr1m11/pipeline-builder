@@ -1,5 +1,8 @@
+import { addNode, connect, createEmptyPipeline, serializePipeline } from '@pipeline-builder/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, waitFor, within } from 'storybook/test';
+import { expect, screen, waitFor, within } from 'storybook/test';
+
+import { DRAFT_STORAGE_KEY, UNREADABLE_DRAFT_STORAGE_KEY } from '@/entities/pipeline';
 
 import { EditorPage } from './EditorPage';
 
@@ -50,6 +53,33 @@ function dragNode(node: HTMLElement, by: Point): void {
     mouse('mousemove', window, { x: pickup.x + by.x * step, y: pickup.y + by.y * step });
   }
   mouse('mouseup', window, { x: pickup.x + by.x, y: pickup.y + by.y });
+}
+
+/** "Ask a question": Input → Prompt, far from the origin so that only a fit of the view shows it. */
+function askPipeline() {
+  let pipeline = createEmptyPipeline({ id: 'saved', name: 'Ask a question' });
+  pipeline = addNode(pipeline, {
+    kind: 'input',
+    id: 'input',
+    position: { x: 2000, y: 1500 },
+  }).pipeline;
+  pipeline = addNode(pipeline, {
+    kind: 'prompt',
+    id: 'prompt',
+    position: { x: 2320, y: 1540 },
+  }).pipeline;
+  const result = connect(
+    pipeline,
+    { source: 'input', sourcePort: 'value', target: 'prompt', targetPort: 'question' },
+    'input-prompt',
+  );
+  if (!result.ok) throw new Error(`Cannot connect: ${result.error}`);
+  return result.value.pipeline;
+}
+
+/** The toast region lives outside the story canvas, at the bottom of the page. */
+function notifications() {
+  return within(screen.getByRole('region', { name: 'Notifications (F8)' }));
 }
 
 const meta = {
@@ -133,6 +163,49 @@ export const JumpToProblem: Story = {
     await expect(
       within(inspector).getByRole('heading', { level: 3, name: 'Prompt 1' }),
     ).toBeVisible();
+  },
+};
+
+/** The pipeline autosaved in this browser opens fitted into view. */
+export const RestoredPipeline: Story = {
+  // The docs page renders every story at once; a seeded draft would open in the others too.
+  tags: ['!autodocs'],
+  beforeEach: () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, serializePipeline(askPipeline()));
+  },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole('heading', { level: 1, name: 'Ask a question' })).toBeVisible();
+    const region = canvas.getByRole('main', { name: 'Pipeline canvas' }).getBoundingClientRect();
+    const isInRegion = ({ x, y }: Point) =>
+      x > region.left && x < region.right && y > region.top && y < region.bottom;
+
+    // Fitted: the nodes are on screen, though they were saved far from the canvas origin.
+    for (const name of ['Input 1', 'Prompt 1']) {
+      const node = await canvas.findByRole('group', { name });
+      await waitFor(() => expect(isInRegion(centerOf(node))).toBe(true));
+    }
+    await expect(
+      await canvas.findByRole('group', { name: 'Input 1 value to Prompt 1 question' }),
+    ).toBeInTheDocument();
+  },
+};
+
+/** A saved pipeline that cannot be read is kept aside, and a toast says so. */
+export const UnreadableSavedPipeline: Story = {
+  tags: ['!autodocs'],
+  beforeEach: () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, '{"format": "pipeline-builder"');
+  },
+  play: async ({ canvas }) => {
+    const toast = await notifications().findByRole('listitem');
+    await expect(toast).toHaveTextContent('Couldn’t restore your last pipeline');
+    await expect(toast).toHaveTextContent('A copy of the saved data was kept in this browser.');
+    await expect(
+      canvas.getByText('Drag a node from the palette, or click one, to start your pipeline.'),
+    ).toBeVisible();
+    await expect(window.localStorage.getItem(UNREADABLE_DRAFT_STORAGE_KEY)).toBe(
+      '{"format": "pipeline-builder"',
+    );
   },
 };
 
