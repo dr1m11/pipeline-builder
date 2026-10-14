@@ -21,6 +21,16 @@ export {
   type NodeEvaluationError,
   type NodeValues,
 } from './engine/evaluate-node';
+export {
+  type NodeRunError,
+  type NodeRunStatus,
+  type RunEvent,
+  type RunOptions,
+  type RunOutcome,
+  runPipeline,
+  type RunSummary,
+  type SkipReason,
+} from './engine/run-pipeline';
 export { type Position } from './geometry';
 export {
   connect,
