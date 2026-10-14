@@ -57,7 +57,14 @@ describe('getNodeFields', () => {
 
   it('gives number fields a number control with their step', () => {
     expect(getNodeFields(nodeOf('llm-call')).map((field) => field.control)).toEqual([
-      { kind: 'choice', options: [{ value: 'mock', label: 'Mock (no API key)' }] },
+      {
+        kind: 'choice',
+        options: [
+          { value: 'mock', label: 'Mock (no API key)' },
+          { value: 'anthropic', label: 'Anthropic (your API key)' },
+          { value: 'openai', label: 'OpenAI (your API key)' },
+        ],
+      },
       { kind: 'text', multiline: false },
       { kind: 'number', step: 0.1 },
       { kind: 'number', step: 1 },

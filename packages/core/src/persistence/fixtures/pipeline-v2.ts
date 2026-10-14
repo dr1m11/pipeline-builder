@@ -1,0 +1,132 @@
+/**
+ * A pipeline file saved by the released version 2 app, byte for byte: the "Route by sentiment"
+ * template (Input → Prompt → LLM Call with temperature 0 and 16 max tokens → Condition → two
+ * Outputs), whose LLM Call uses the mock provider. It was exported with the Export button from
+ * production (https://pipeline-builder.marat-gabdrashitov17.workers.dev, deployed from commit
+ * ea6f383) on 2026-10-14. The same file is `apps/web/e2e/fixtures/pipeline-v2.json`. It is a raw
+ * string so that the escapes in its JSON stay as they are in the file. Never edit it: it stands for
+ * the files users already have.
+ */
+export const PIPELINE_V2 = String.raw`{
+  "format": "pipeline-builder",
+  "schemaVersion": 2,
+  "id": "8cbf5093-6ca9-4c56-9b62-a5d3f90a37a3",
+  "name": "Route by sentiment",
+  "nodes": [
+    {
+      "id": "43b22fbd-daae-4377-bdfa-78778fd0c3e4",
+      "kind": "input",
+      "label": "Review",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "valueType": "text",
+        "value": "The headphones arrived a day early, and they sound great."
+      }
+    },
+    {
+      "id": "75191737-a158-4dab-9dfb-97fa84c4f452",
+      "kind": "prompt",
+      "label": "Sentiment prompt",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "template": "Is this review positive or negative? Answer with one lowercase word: positive or negative.\n\nReview: {{review}}"
+      }
+    },
+    {
+      "id": "0ee1a45d-77cf-40f8-8893-0c5017666142",
+      "kind": "llm-call",
+      "label": "Classifier",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "provider": "mock",
+        "model": "mock",
+        "temperature": 0,
+        "maxTokens": 16
+      }
+    },
+    {
+      "id": "d995ca6a-28e3-4743-93ab-bda437a07472",
+      "kind": "condition",
+      "label": "Is positive?",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "operator": "contains",
+        "operand": "positive"
+      }
+    },
+    {
+      "id": "600289af-8651-4a39-8c7c-5e4760bb94ff",
+      "kind": "output",
+      "label": "Positive",
+      "position": {
+        "x": 1200,
+        "y": -100
+      },
+      "data": {
+        "format": "text"
+      }
+    },
+    {
+      "id": "61f95275-b57f-414b-ad1e-eebb0f86b325",
+      "kind": "output",
+      "label": "Negative",
+      "position": {
+        "x": 1200,
+        "y": 100
+      },
+      "data": {
+        "format": "text"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "feae826c-6c75-4e44-b612-ecfcf5d111d0",
+      "source": "43b22fbd-daae-4377-bdfa-78778fd0c3e4",
+      "sourcePort": "value",
+      "target": "75191737-a158-4dab-9dfb-97fa84c4f452",
+      "targetPort": "review"
+    },
+    {
+      "id": "d721d188-b576-4775-a2c6-ad42412e623a",
+      "source": "75191737-a158-4dab-9dfb-97fa84c4f452",
+      "sourcePort": "prompt",
+      "target": "0ee1a45d-77cf-40f8-8893-0c5017666142",
+      "targetPort": "prompt"
+    },
+    {
+      "id": "ac65a714-5429-421d-8856-a1203628023d",
+      "source": "0ee1a45d-77cf-40f8-8893-0c5017666142",
+      "sourcePort": "response",
+      "target": "d995ca6a-28e3-4743-93ab-bda437a07472",
+      "targetPort": "value"
+    },
+    {
+      "id": "56a3852a-083d-42db-965e-bb45a7ca0552",
+      "source": "d995ca6a-28e3-4743-93ab-bda437a07472",
+      "sourcePort": "true",
+      "target": "600289af-8651-4a39-8c7c-5e4760bb94ff",
+      "targetPort": "value"
+    },
+    {
+      "id": "38b17984-6d2d-4f33-bbfa-9d6068b88e55",
+      "source": "d995ca6a-28e3-4743-93ab-bda437a07472",
+      "sourcePort": "false",
+      "target": "61f95275-b57f-414b-ad1e-eebb0f86b325",
+      "targetPort": "value"
+    }
+  ]
+}
+`;

@@ -44,7 +44,7 @@ Earlier decisions constrain the format. [ADR 0005](./0005-node-catalogue-and-typ
 | 4    | Checks the document with a Zod schema built from each kind's `dataSchema`                     | `invalid-pipeline` with the path of the first issue |
 | 5    | Checks ids and repairs edges the editor could not show or keep                                | `duplicate-id`                                      |
 
-**Version rules.** `schemaVersion` is a whole number. Any change to the persisted shape bumps it and adds a migration `{ from, migrate }` that turns a raw JSON document of version `from` into version `from + 1`. Migrations run one step at a time on raw JSON, before Zod, so the schema only ever describes the current version and each migration only knows its two neighbours. A file from a newer version is refused rather than loaded in part. Migrations are append-only: a released one is never changed or removed, and each comes with a fixture test, a file saved in the old version.
+**Version rules.** `schemaVersion` is a whole number. Any change to the persisted shape bumps it and adds a migration `{ from, migrate }` that turns a raw JSON document of version `from` into version `from + 1`. So does a change that only widens what a field accepts (a new option of an enum), with a migration that changes nothing: an older build then refuses the new files as `newer-version` and tells the user to update, instead of reporting them as `invalid-pipeline`. Migrations run one step at a time on raw JSON, before Zod, so the schema only ever describes the current version and each migration only knows its two neighbours. A file from a newer version is refused rather than loaded in part. Migrations are append-only: a released one is never changed or removed, and each comes with a fixture test, a file saved in the old version.
 
 **Lenient parsing.** Node data is checked against `dataSchema`, not `rulesSchema`, so a blank template or an out-of-range temperature loads and validation reports it. Unknown fields are dropped at every level. Names and labels follow the editor's rules: trimmed, not blank, not too long.
 
@@ -63,9 +63,10 @@ Repairs are returned with the pipeline (`{ edgeId, reason }`) so the app can tel
 
 Every change to the persisted shape, oldest first; each row is one entry of `MIGRATIONS` in `packages/core/src/persistence/migrations.ts`. Version 1 is the first persisted shape: the node catalogue of [ADR 0005](./0005-node-catalogue-and-typed-ports.md) with the data fields of [ADR 0007](./0007-zod-schemas-for-node-data-in-core.md).
 
-| From | To  | Change                                                                                                                                                             |
-| ---- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1    | 2   | LLM Call gains `provider` (`mock`): every LLM Call node gets `mock`, the only provider version 1 had ([#61](https://github.com/dr1m11/pipeline-builder/issues/61)) |
+| From | To  | Change                                                                                                                                                                                                |
+| ---- | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | 2   | LLM Call gains `provider` (`mock`): every LLM Call node gets `mock`, the only provider version 1 had ([#61](https://github.com/dr1m11/pipeline-builder/issues/61))                                    |
+| 2    | 3   | `provider` may also be `anthropic` or `openai`; nothing changes, the bump makes a version 2 build refuse these files as `newer-version` ([#78](https://github.com/dr1m11/pipeline-builder/issues/78)) |
 
 ## Consequences
 
@@ -76,6 +77,7 @@ Every change to the persisted shape, oldest first; each row is one entry of `MIG
 - The autosaved draft goes through the same parser, so a draft written before a deploy that bumps the version is migrated on the next load. A draft the parser refuses (a newer version after a rollback, damaged text) is moved to `pb:pipeline:unreadable` and reported rather than overwritten by the next save. A draft that loads only with repairs is reported too, and its saved text is copied there before the next save replaces it.
 - All tabs of the editor autosave to the same `pb:pipeline` key, so with several tabs open the last save wins and the next load shows only that tab's pipeline. Collaboration in A9 replaces this.
 - Version 2 came with [#61](https://github.com/dr1m11/pipeline-builder/issues/61): a `provider` field on LLM Call nodes and the first row of [Migrations](#migrations). Its fixture is a real version 1 file, exported from production before the change and kept byte for byte (`packages/core/src/persistence/fixtures/pipeline-v1.ts` for core tests, `apps/web/e2e/fixtures/pipeline-v1.json` for the e2e import and the draft restore test). Later versions keep a fixture of each released version the same way.
+- Version 3 came with [#78](https://github.com/dr1m11/pipeline-builder/issues/78): the `anthropic` and `openai` providers, the first version bump that only widens an enum. Its fixture is a real version 2 file, the "Route by sentiment" template exported from production (commit ea6f383) before the change and kept byte for byte (`packages/core/src/persistence/fixtures/pipeline-v2.ts`, `apps/web/e2e/fixtures/pipeline-v2.json`).
 
 ## Alternatives considered
 

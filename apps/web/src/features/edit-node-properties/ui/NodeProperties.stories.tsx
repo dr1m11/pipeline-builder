@@ -65,9 +65,13 @@ export const InputWithErrors: Story = {
 export const LlmCall: Story = {
   args: { kind: 'llm-call' },
   play: async ({ canvas, userEvent }) => {
-    await expect(canvas.getByRole('combobox', { name: 'Provider' })).toHaveDisplayValue(
-      'Mock (no API key)',
-    );
+    const provider = canvas.getByRole('combobox', { name: 'Provider' });
+    await expect(provider).toHaveDisplayValue('Mock (no API key)');
+    await expect(provider).toHaveAccessibleDescription(/sent only to this app’s own proxy/);
+
+    // The default model follows the provider.
+    await userEvent.selectOptions(provider, 'Anthropic (your API key)');
+    await expect(canvas.getByRole('textbox', { name: 'Model' })).toHaveValue('claude-haiku-5-5');
 
     const temperature = canvas.getByRole('spinbutton', { name: 'Temperature' });
     await userEvent.clear(temperature);

@@ -5,6 +5,7 @@ import { useForm, type UseFormRegisterReturn } from 'react-hook-form';
 
 import { usePipelineStoreApi } from '@/entities/pipeline';
 
+import { fieldChanges } from '../lib/field-changes';
 import {
   type NodeFormOutput,
   nodeFormSchema,
@@ -39,15 +40,12 @@ export interface NodeForm {
  */
 export function useNodeForm(node: PipelineNode): NodeForm {
   const store = usePipelineStoreApi();
-  const { register, getValues, getFieldState, formState, reset, trigger, setFocus } = useForm<
-    NodeFormValues,
-    unknown,
-    NodeFormOutput
-  >({
-    resolver: zodResolver(nodeFormSchema(node.kind)),
-    mode: 'onChange',
-    defaultValues: toFormValues(node),
-  });
+  const { register, getValues, setValue, getFieldState, formState, reset, trigger, setFocus } =
+    useForm<NodeFormValues, unknown, NodeFormOutput>({
+      resolver: zodResolver(nodeFormSchema(node.kind)),
+      mode: 'onChange',
+      defaultValues: toFormValues(node),
+    });
 
   // The data and label that the form itself last produced in the pipeline.
   const savedRef = useRef({ data: node.data, label: node.label });
@@ -84,7 +82,13 @@ export function useNodeForm(node: PipelineNode): NodeForm {
         actions.renameNode(node.id, getValues('label'));
       } else if (name?.startsWith(DATA_PREFIX)) {
         const field = name.slice(DATA_PREFIX.length);
-        actions.updateNodeData(node.id, { [field]: getValues(`data.${field}`) });
+        const before = findNode(actions.pipeline, node.id) ?? node;
+        const changes = fieldChanges(before, field, getValues(`data.${field}`));
+        actions.updateNodeData(node.id, changes);
+        // Fields that follow the edited one (an LLM Call's model) show their new values.
+        for (const [other, value] of Object.entries(changes)) {
+          if (other !== field) setValue(`data.${other}`, value);
+        }
       } else {
         return;
       }

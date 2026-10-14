@@ -6,7 +6,7 @@ import {
   NODE_KINDS,
   type NodeKind,
 } from '@pipeline-builder/core';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -59,14 +59,77 @@ describe('NodeProperties', () => {
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('LLM Call 1');
     const provider = screen.getByRole('combobox', { name: 'Provider' });
     expect(provider).toHaveDisplayValue('Mock (no API key)');
-    expect(provider).toHaveAccessibleDescription(
-      'The mock provider streams sample text and needs no API key.',
-    );
     const model = screen.getByRole('textbox', { name: 'Model' });
     expect(provider.compareDocumentPosition(model)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(model).toHaveValue('mock');
     expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toHaveValue(0.7);
     expect(screen.getByRole('spinbutton', { name: 'Max tokens' })).toHaveValue(512);
+  });
+
+  it('offers the providers by whether they need your API key and says where keys go', () => {
+    renderForm('llm-call');
+
+    const provider = screen.getByRole('combobox', { name: 'Provider' });
+    expect(
+      within(provider)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Mock (no API key)', 'Anthropic (your API key)', 'OpenAI (your API key)']);
+    expect(provider).toHaveAccessibleDescription(
+      'Mock streams sample text. Your API key for Anthropic or OpenAI is sent only to this app’s own proxy.',
+    );
+  });
+
+  it('switches a default model along with the provider, as one undo step', async () => {
+    const { store, node, user } = renderForm('llm-call');
+    const provider = screen.getByRole('combobox', { name: 'Provider' });
+    const model = screen.getByRole('textbox', { name: 'Model' });
+
+    await user.selectOptions(provider, 'Anthropic (your API key)');
+
+    expect(node().data).toMatchObject({ provider: 'anthropic', model: 'claude-haiku-5-5' });
+    expect(model).toHaveValue('claude-haiku-5-5');
+    expect(store.getState().history.past).toHaveLength(1);
+
+    store.getState().undo();
+
+    expect(node().data).toMatchObject({ provider: 'mock', model: 'mock' });
+    await waitFor(() => {
+      expect(provider).toHaveDisplayValue('Mock (no API key)');
+    });
+    expect(model).toHaveValue('mock');
+  });
+
+  it('fills a blank model with the default of the new provider', async () => {
+    const { node, user } = renderForm('llm-call');
+    const model = screen.getByRole('textbox', { name: 'Model' });
+
+    await user.clear(model);
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Provider' }),
+      'OpenAI (your API key)',
+    );
+
+    expect(node().data).toMatchObject({ provider: 'openai', model: 'gpt-6-luna' });
+    expect(model).toHaveValue('gpt-6-luna');
+    await waitFor(() => {
+      expect(model).toBeValid();
+    });
+  });
+
+  it('keeps a model the user chose when the provider changes', async () => {
+    const { node, user } = renderForm('llm-call');
+    const model = screen.getByRole('textbox', { name: 'Model' });
+
+    await user.clear(model);
+    await user.type(model, 'claude-opus-5-5');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Provider' }),
+      'Anthropic (your API key)',
+    );
+
+    expect(node().data).toMatchObject({ provider: 'anthropic', model: 'claude-opus-5-5' });
+    expect(model).toHaveValue('claude-opus-5-5');
   });
 
   it('applies a template as it is typed, so the ports follow it', async () => {
