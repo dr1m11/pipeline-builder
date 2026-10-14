@@ -2,16 +2,25 @@ import {
   addNode,
   connect,
   createEmptyPipeline,
+  formatLlmStreamEvent,
+  LLM_REQUEST_SCHEMA,
+  type LlmProvider,
+  type LlmRequest,
+  type LlmStreamEvent,
+  mockCompletion,
   NODE_DEFINITIONS,
   parsePipelineFile,
+  type Pipeline,
+  PIPELINE_TEMPLATES,
   serializePipeline,
+  splitIntoTokens,
 } from '@pipeline-builder/core';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { clearApiKey, getApiKey, isApiKeyRemembered } from '@/entities/api-key';
+import { clearApiKey, getApiKey, isApiKeyRemembered, saveApiKey } from '@/entities/api-key';
 import { DRAFT_STORAGE_KEY, UNREADABLE_DRAFT_STORAGE_KEY } from '@/entities/pipeline';
 import { ToastProvider } from '@/shared/ui/toast';
 import { TooltipProvider } from '@/shared/ui/tooltip';
@@ -507,7 +516,7 @@ describe('EditorPage keyboard shortcuts help', () => {
       within(dialog)
         .getAllByRole('heading', { level: 3 })
         .map((heading) => heading.textContent),
-    ).toEqual(['Edit', 'Canvas', 'Help']);
+    ).toEqual(['Edit', 'Run', 'Canvas', 'Help']);
     const edit = within(dialog).getByRole('table', { name: 'Edit' });
     for (const row of [
       'Undo Ctrl Z',
@@ -516,6 +525,10 @@ describe('EditorPage keyboard shortcuts help', () => {
       'Duplicate Ctrl D',
     ]) {
       expect(within(edit).getByRole('row', { name: row })).toBeInTheDocument();
+    }
+    const run = within(dialog).getByRole('table', { name: 'Run' });
+    for (const row of ['Run the pipeline Ctrl Enter', 'Stop the run Ctrl .']) {
+      expect(within(run).getByRole('row', { name: row })).toBeInTheDocument();
     }
     const canvas = within(dialog).getByRole('table', { name: 'Canvas' });
     for (const row of [
@@ -659,6 +672,155 @@ describe('EditorPage API keys', () => {
     });
     expect(exported).not.toContain(secret);
     expect(window.location.href).not.toContain(secret);
+  });
+});
+
+describe('EditorPage runs', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    clearApiKey('anthropic');
+  });
+
+  const runToolbar = () => within(screen.getByRole('toolbar', { name: 'Run' }));
+  const runButton = () => runToolbar().getByRole('button', { name: 'Run' });
+  const stopButton = () => runToolbar().getByRole('button', { name: 'Stop' });
+  const runStatus = () => runToolbar().getByRole('status');
+
+  /** "Ask a question" with its Model on `provider`, as the autosaved draft the editor opens. */
+  function openAskPipeline(provider: LlmProvider) {
+    const template = PIPELINE_TEMPLATES.find(({ id }) => id === 'ask-a-question');
+    if (template === undefined) throw new Error('The "Ask a question" template is missing');
+    const pipeline: Pipeline = {
+      ...template.pipeline,
+      nodes: template.pipeline.nodes.map((node) =>
+        node.kind === 'llm-call' ? { ...node, data: { ...node.data, provider } } : node,
+      ),
+    };
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, serializePipeline(pipeline));
+  }
+
+  /** An event stream that sends `events` and, unless `open`, ends. */
+  function eventStream(events: readonly LlmStreamEvent[], { open = false } = {}): Response {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const streamEvent of events) {
+          const { event, data } = formatLlmStreamEvent(streamEvent);
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+        }
+        if (!open) controller.close();
+      },
+    });
+    return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
+  }
+
+  /**
+   * Stands in for the proxy on the network: each request it gets is answered by `answer`. By
+   * default it streams the mock provider's completion, as the proxy does.
+   */
+  function stubProxy(
+    answer: (request: LlmRequest) => Response = (request) =>
+      eventStream([
+        ...splitIntoTokens(mockCompletion(request)).map((text) => ({
+          type: 'token' as const,
+          text,
+        })),
+        { type: 'done' },
+      ]),
+  ) {
+    const fetchMock = vi.fn<typeof fetch>((_input, init) => {
+      const body = typeof init?.body === 'string' ? init.body : '';
+      return Promise.resolve(answer(LLM_REQUEST_SCHEMA.parse(JSON.parse(body))));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('runs a template through the proxy and announces the end', async () => {
+    const fetchMock = stubProxy();
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Ask a question' }));
+
+    await user.click(runButton());
+
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Run finished: 4 nodes done');
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [endpoint, init] = fetchMock.mock.calls[0] ?? [];
+    expect(endpoint).toBe('/api/llm/stream');
+    expect(init?.method).toBe('POST');
+    expect(runButton()).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps Run unavailable while the pipeline has errors', async () => {
+    const { user } = renderPage();
+    expect(runButton()).toHaveAccessibleDescription('Add a node to run');
+
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+
+    expect(runButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(runButton()).toHaveAccessibleDescription('Fix 1 error to run');
+  });
+
+  it('stops a run with Ctrl+. and lets the user edit meanwhile', async () => {
+    const fetchMock = stubProxy(() =>
+      eventStream([{ type: 'token', text: 'Because' }], { open: true }),
+    );
+    openAskPipeline('mock');
+    const { user } = renderPage();
+
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await waitFor(() => {
+      expect(stopButton()).not.toHaveAttribute('aria-disabled');
+    });
+    await user.click(screen.getByRole('button', { name: 'Add Output' }));
+    await user.keyboard('{Control>}.{/Control}');
+
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Run stopped');
+    });
+    expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    expect(await screen.findByRole('group', { name: 'Output 1' })).toBeInTheDocument();
+  });
+
+  it('asks for a missing API key, then gives focus back to Run', async () => {
+    const fetchMock = stubProxy();
+    openAskPipeline('anthropic');
+    const { user } = renderPage();
+
+    await user.click(runButton());
+
+    const dialog = screen.getByRole('dialog', { name: 'API keys' });
+    expect(within(dialog).getByLabelText('Anthropic')).toHaveFocus();
+    expect(fetchMock).not.toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(runButton()).toHaveFocus();
+  });
+
+  it('shows a rejected key in a toast that offers to add another', async () => {
+    saveApiKey('anthropic', 'sk-ant-revoked', { remember: false });
+    stubProxy(() =>
+      eventStream([{ type: 'error', code: 'invalid-key', message: 'The API key was rejected.' }]),
+    );
+    openAskPipeline('anthropic');
+    const { user } = renderPage();
+
+    await user.click(runButton());
+
+    const toast = await notifications().findByRole('listitem');
+    expect(toast).toHaveTextContent('Run failed');
+    expect(toast).toHaveTextContent('Model: The API key was rejected.');
+    expect(runStatus()).toHaveTextContent('Run failed at Model: The API key was rejected.');
+    const region = screen.getByRole('region', { name: 'Notifications (F8)' });
+    await waitFor(() => {
+      expect(region).not.toHaveStyle({ pointerEvents: 'none' });
+    });
+    await user.click(within(toast).getByRole('button', { name: 'Add API key' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'API keys' });
+    expect(within(dialog).getByLabelText('Anthropic')).toHaveFocus();
   });
 });
 

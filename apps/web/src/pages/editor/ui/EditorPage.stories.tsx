@@ -263,7 +263,8 @@ export const AddNodeWithClick: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Add LLM Call' }));
 
     await expect(await canvas.findByRole('group', { name: 'LLM Call 1' })).toBeVisible();
-    await expect(canvas.getByRole('status')).toHaveTextContent('Added LLM Call 1');
+    const palette = canvas.getByRole('complementary', { name: 'Node palette' });
+    await expect(within(palette).getByRole('status')).toHaveTextContent('Added LLM Call 1');
   },
 };
 
