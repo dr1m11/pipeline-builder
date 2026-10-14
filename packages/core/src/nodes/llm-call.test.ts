@@ -5,7 +5,9 @@ import {
   LLM_CALL_DATA_SCHEMA,
   LLM_CALL_DEFINITION,
   LLM_CALL_RULES_SCHEMA,
+  LLM_PROVIDERS,
   type LlmCallNodeData,
+  type LlmProvider,
 } from './llm-call';
 
 const DEFAULTS = LLM_CALL_DEFINITION.createData();
@@ -17,8 +19,22 @@ function ruleMessages(changes: Partial<LlmCallNodeData>) {
 }
 
 describe('LLM_CALL_DEFINITION', () => {
-  it('starts with the mock model and moderate settings', () => {
-    expect(DEFAULTS).toEqual({ model: 'mock', temperature: 0.7, maxTokens: 512 });
+  it('starts with the mock provider and model and moderate settings', () => {
+    expect(DEFAULTS).toEqual({ provider: 'mock', model: 'mock', temperature: 0.7, maxTokens: 512 });
+  });
+
+  it('asks for the provider before the model', () => {
+    expect(Object.keys(LLM_CALL_DATA_SCHEMA.shape)).toEqual([
+      'provider',
+      'model',
+      'temperature',
+      'maxTokens',
+    ]);
+    expect(LLM_CALL_DEFINITION.fields.provider).toEqual({
+      label: 'Provider',
+      description: 'The mock provider streams sample text and needs no API key.',
+      optionLabels: { mock: 'Mock (no API key)' },
+    });
   });
 
   it('requires a text prompt, accepts an optional system prompt and outputs text', () => {
@@ -36,7 +52,18 @@ describe('LLM_CALL_DATA_SCHEMA', () => {
   it('describes exactly the LLM Call data type', () => {
     expectTypeOf<LlmCallNodeData>().toExtend<z.output<typeof LLM_CALL_DATA_SCHEMA>>();
     expectTypeOf<z.output<typeof LLM_CALL_DATA_SCHEMA>>().toExtend<LlmCallNodeData>();
+    expectTypeOf<LlmCallNodeData>().toExtend<z.output<typeof LLM_CALL_RULES_SCHEMA>>();
     expectTypeOf<z.output<typeof LLM_CALL_RULES_SCHEMA>>().toExtend<LlmCallNodeData>();
+    expectTypeOf<z.output<typeof LLM_CALL_DATA_SCHEMA>['provider']>().toEqualTypeOf<LlmProvider>();
+  });
+
+  it('accepts every provider and nothing else', () => {
+    for (const provider of LLM_PROVIDERS) {
+      expect(LLM_CALL_DATA_SCHEMA.safeParse({ ...DEFAULTS, provider }).success).toBe(true);
+    }
+    expect(LLM_CALL_DATA_SCHEMA.safeParse({ ...DEFAULTS, provider: 'openai' }).success).toBe(false);
+    const withoutProvider = { model: 'mock', temperature: 0.7, maxTokens: 512 };
+    expect(LLM_CALL_DATA_SCHEMA.safeParse(withoutProvider).success).toBe(false);
   });
 
   it('accepts out-of-range settings but not numbers that are not finite', () => {
@@ -50,6 +77,10 @@ describe('LLM_CALL_DATA_SCHEMA', () => {
 describe('LLM_CALL_RULES_SCHEMA', () => {
   it('accepts the default settings', () => {
     expect(ruleMessages({})).toEqual({});
+  });
+
+  it.each(LLM_PROVIDERS)('accepts the provider "%s"', (provider) => {
+    expect(ruleMessages({ provider })).toEqual({});
   });
 
   it('requires a model that is not blank', () => {

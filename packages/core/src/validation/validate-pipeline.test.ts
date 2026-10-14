@@ -24,7 +24,12 @@ function pipelineOf(nodes: readonly PipelineNode[], edges: readonly PipelineEdge
 
 const INPUT = nodeOf('input', 'in', { valueType: 'text', value: 'Why?' });
 const PROMPT = nodeOf('prompt', 'prompt', { template: 'Answer: {{question}}' });
-const LLM = nodeOf('llm-call', 'llm', { model: 'mock', temperature: 0.7, maxTokens: 512 });
+const LLM = nodeOf('llm-call', 'llm', {
+  provider: 'mock',
+  model: 'mock',
+  temperature: 0.7,
+  maxTokens: 512,
+});
 const OUTPUT = nodeOf('output', 'out', { format: 'text' });
 const E1 = edge('e1', 'in.value', 'prompt.question');
 const E2 = edge('e2', 'prompt.prompt', 'llm.prompt');

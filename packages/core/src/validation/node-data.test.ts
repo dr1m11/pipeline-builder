@@ -15,7 +15,7 @@ describe('fieldProblems', () => {
   it('names the field before the rule message, one problem per field', () => {
     const llm: PipelineNode = {
       ...createNode('llm-call', { id: 'l', label: 'L', position: ORIGIN }),
-      data: { model: '', temperature: 3, maxTokens: -1.5 },
+      data: { provider: 'mock', model: '', temperature: 3, maxTokens: -1.5 },
     };
     expect(fieldProblems(llm)).toEqual([
       { field: 'model', message: 'Model: Required' },
