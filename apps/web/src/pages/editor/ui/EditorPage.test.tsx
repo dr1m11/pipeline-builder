@@ -11,6 +11,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { clearApiKey, getApiKey, isApiKeyRemembered } from '@/entities/api-key';
 import { DRAFT_STORAGE_KEY, UNREADABLE_DRAFT_STORAGE_KEY } from '@/entities/pipeline';
 import { ToastProvider } from '@/shared/ui/toast';
 import { TooltipProvider } from '@/shared/ui/tooltip';
@@ -585,3 +586,86 @@ describe('EditorPage keyboard shortcuts help', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
+
+describe('EditorPage API keys', () => {
+  const apiKeysButton = () => screen.getByRole('button', { name: 'API keys' });
+  const objectUrlMethods = (['createObjectURL', 'revokeObjectURL'] as const).map(
+    (name) => [name, Object.getOwnPropertyDescriptor(URL, name)] as const,
+  );
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    for (const [name, descriptor] of objectUrlMethods) {
+      if (descriptor === undefined) Reflect.deleteProperty(URL, name);
+      else Object.defineProperty(URL, name, descriptor);
+    }
+    clearApiKey('anthropic');
+    clearApiKey('openai');
+  });
+
+  it('opens the API keys dialog from the header and gives focus back to its button', async () => {
+    const { user } = renderPage();
+
+    await user.click(apiKeysButton());
+    const dialog = screen.getByRole('dialog', { name: 'API keys' });
+    expect(within(dialog).getByLabelText('Anthropic')).toHaveFocus();
+    expect(within(dialog).getByLabelText('OpenAI')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(apiKeysButton()).toHaveFocus();
+  });
+
+  it('keeps a saved key out of the pipeline, its autosaved draft and its exported file', async () => {
+    const secret = 'sk-ant-secret-0123456789';
+    // jsdom has no object URLs and cannot download: the exported file is read from its blob.
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => 'blob:exported-pipeline');
+    Object.defineProperties(URL, {
+      createObjectURL: { configurable: true, value: createObjectURL },
+      revokeObjectURL: { configurable: true, value: vi.fn() },
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add LLM Call' }));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Provider' }),
+      'Anthropic (your API key)',
+    );
+
+    await user.click(apiKeysButton());
+    await user.type(screen.getByLabelText('Anthropic'), secret);
+    await user.click(screen.getByRole('checkbox', { name: 'Remember on this device' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(screen.getByRole('button', { name: 'Add Output' }));
+
+    // The key is saved, under its own storage key only.
+    expect(getApiKey('anthropic')).toBe(secret);
+    expect(isApiKeyRemembered('anthropic')).toBe(true);
+    await waitFor(() => {
+      expect(savedPipeline()?.nodes.map((node) => node.label)).toEqual(['LLM Call 1', 'Output 1']);
+    });
+    expect(savedPipeline()?.nodes[0]?.data).toMatchObject({ provider: 'anthropic' });
+    expect(storedEntriesWith(window.localStorage, secret)).toEqual(['pb:api-key:anthropic']);
+    expect(storedEntriesWith(window.sessionStorage, secret)).toEqual([]);
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toContain(secret);
+
+    await user.click(screen.getByRole('button', { name: 'Export pipeline' }));
+
+    const [blob] = createObjectURL.mock.calls[0] ?? [];
+    const exported = (await blob?.text()) ?? '';
+    expect(parsePipelineFile(exported)).toMatchObject({
+      ok: true,
+      value: { pipeline: { nodes: [{ data: { provider: 'anthropic' } }, { label: 'Output 1' }] } },
+    });
+    expect(exported).not.toContain(secret);
+    expect(window.location.href).not.toContain(secret);
+  });
+});
+
+/** Keys of the entries of `storage` whose value contains `text`. */
+function storedEntriesWith(storage: Storage, text: string): string[] {
+  const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index));
+  return keys.filter(
+    (key): key is string => key !== null && (storage.getItem(key) ?? '').includes(text),
+  );
+}
