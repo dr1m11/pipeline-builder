@@ -1,6 +1,7 @@
 # Cloudflare Workers static assets: response headers (https://developers.cloudflare.com/workers/static-assets/headers/)
 # React Flow positions nodes with inline styles, hence style-src 'unsafe-inline'.
-# connect-src is widened for the SSE proxy in A5; worker-src allows the layout worker in A6.
+# connect-src stays 'self': the LLM proxy is the same Worker, on /api/* (docs/adr/0012), and sets its
+# own headers, since these apply to static assets only. worker-src allows the layout worker in A6.
 
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'

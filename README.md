@@ -39,7 +39,7 @@ Planned (A5 onward):
 
 ## Tech stack
 
-React 19 · TypeScript (strict) · Vite · React Flow · React Hook Form · Zod · Radix UI · Tailwind CSS · Vitest · Testing Library · Playwright · Storybook · pnpm workspaces · Cloudflare Workers
+React 19 · TypeScript (strict) · Vite · React Flow · React Hook Form · Zod · Radix UI · Tailwind CSS · Vitest · Testing Library · Playwright · Storybook · pnpm workspaces · Hono · Cloudflare Workers
 
 ## Architecture
 
@@ -52,6 +52,7 @@ apps/web/              React SPA, Feature-Sliced Design (checked by Steiger)
                        import-export, load-template, review-problems, show-shortcuts, toggle-theme)
   src/entities/        pipeline store with the undo history, node cards
   src/shared/          UI kit, helpers, config
+apps/proxy/            Hono Worker: the LLM proxy on /api/* (SSE); serves the SPA build as assets
 packages/core/         framework-free domain: graph model, validation, engine, undo, migrations
 docs/adr/              architecture decision records
 ```
@@ -64,7 +65,7 @@ docs/adr/              architecture decision records
 - **Versioned pipeline files.** Export, import, autosave and the clipboard share one JSON format with a schema version and one parser: files from older versions pass through a chain of migrations, are checked with Zod, and connections the editor cannot keep are dropped and reported. See [ADR 0010](docs/adr/0010-pipeline-files-and-schema-migrations.md).
 - **One set of rules for forms and validation.** Each node kind describes its data with Zod schemas in core; the properties form and graph validation check the same rules, so the form and the canvas always agree. See [ADR 0007](docs/adr/0007-zod-schemas-for-node-data-in-core.md) and [ADR 0008](docs/adr/0008-graph-validation.md).
 - **Design tokens** as CSS variables exposed through Tailwind utilities; components never use raw colours. See [ADR 0004](docs/adr/0004-ui-stack-radix-and-tailwind.md).
-- **Hosting** on Cloudflare Workers static assets, with the SSE proxy and collaboration backend planned on the same platform. See [ADR 0003](docs/adr/0003-hosting-on-cloudflare-workers.md).
+- **One Worker, one origin.** Cloudflare Workers serves the SPA as static assets and runs the LLM proxy on `/api/*`, so there is no CORS and the CSP keeps `connect-src 'self'`. The proxy streams answers over SSE, rate-limits requests, and sends the user's API key only to the provider, never storing or logging it. See [ADR 0003](docs/adr/0003-hosting-on-cloudflare-workers.md) and [ADR 0012](docs/adr/0012-llm-proxy-same-origin-worker.md).
 
 ## Quality gates
 
@@ -87,7 +88,7 @@ Requires Node.js 24 and pnpm 10.
 
 ```bash
 pnpm install
-pnpm dev          # http://localhost:5173
+pnpm dev          # http://localhost:5173, with the API from wrangler dev on :8787
 pnpm storybook    # http://localhost:6006
 ```
 
@@ -95,7 +96,7 @@ pnpm storybook    # http://localhost:6006
 | ---------------------- | -------------------------------------------------------------- |
 | `pnpm verify`          | Format check, lint, Steiger, typecheck, unit tests, build      |
 | `pnpm verify:full`     | `verify` plus Storybook tests and e2e                          |
-| `pnpm test`            | Unit tests (`core` and `web` projects)                         |
+| `pnpm test`            | Unit tests (`core`, `proxy` and `web` projects)                |
 | `pnpm test:coverage`   | Unit tests with coverage thresholds                            |
 | `pnpm test:storybook`  | Stories as browser tests (requires `playwright install`)       |
 | `pnpm test:e2e`        | Playwright e2e against `vite preview` (run `pnpm build` first) |
