@@ -8,7 +8,7 @@ import {
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ReactFlowProvider, useViewport } from '@xyflow/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createPipelineStore, PipelineStoreProvider } from '@/entities/pipeline';
 
@@ -278,5 +278,64 @@ describe('PipelineCanvas view of a replaced document', () => {
 
     expect(await screen.findByRole('group', { name: 'Output 1' })).toBeInTheDocument();
     expect(viewport()).toEqual(opened);
+  });
+});
+
+describe('PipelineCanvas focus after a replaced document', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('gives the first node of the new document focus when focus went with the old one', async () => {
+    const { store } = renderCanvasWithViewport(chain());
+    const prompt = await screen.findByRole('group', { name: 'Prompt 1' });
+    act(() => {
+      prompt.focus();
+    });
+
+    act(() => {
+      store.getState().replacePipeline(farAway(), 'import');
+    });
+
+    // Once the view fits it: React Flow would otherwise jump to the node and cut the fit short.
+    await waitFor(() => {
+      expect(screen.getByRole('group', { name: 'Output 1' })).toHaveFocus();
+    });
+  });
+
+  it('leaves focus on a control that is still on the page', async () => {
+    // Without animation the fit, and what follows it, is over as soon as the view changes.
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    const store = createPipelineStore(chain());
+    render(
+      <PipelineStoreProvider store={store}>
+        <ReactFlowProvider>
+          <button type="button">Import pipeline</button>
+          <div style={{ width: 1200, height: 600 }}>
+            <PipelineCanvas />
+          </div>
+          <ViewportStatus />
+        </ReactFlowProvider>
+      </PipelineStoreProvider>,
+    );
+    await screen.findByRole('group', { name: 'Prompt 1' });
+    const control = screen.getByRole('button', { name: 'Import pipeline' });
+    act(() => {
+      control.focus();
+    });
+
+    act(() => {
+      store.getState().replacePipeline(farAway(), 'import');
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('status', { name: 'Viewport' })).toHaveTextContent(/^-\d{4,}/);
+    });
+
+    expect(control).toHaveFocus();
   });
 });

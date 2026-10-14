@@ -393,6 +393,60 @@ describe('EditorPage autosave', () => {
   });
 });
 
+describe('EditorPage templates', () => {
+  it('starts from a template offered on the empty canvas', async () => {
+    const { user } = renderPage();
+    const canvas = screen.getByRole('main', { name: 'Pipeline canvas' });
+    const templates = within(canvas).getByRole('group', { name: 'Start from a template:' });
+
+    await user.click(within(templates).getByRole('button', { name: 'Ask a question' }));
+
+    for (const name of ['Question', 'Answer prompt', 'Model', 'Answer']) {
+      expect(await screen.findByRole('group', { name })).toBeInTheDocument();
+    }
+    expect(
+      await screen.findByRole('group', { name: 'Question value to Answer prompt question' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Ask a question' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Start from a template:' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Problems: none' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Undo Load template “Ask a question”' }),
+    ).toBeEnabled();
+    // The button left with the hint; focus goes on from the canvas, not from the top of the page.
+    await waitFor(() => {
+      expect(screen.getByRole('group', { name: 'Question' })).toHaveFocus();
+    });
+    expect(document.body).not.toHaveFocus();
+  });
+
+  it('replaces the pipeline from the New menu first in the File toolbar', async () => {
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Add Prompt' }));
+    const toolbar = screen.getByRole('toolbar', { name: 'File' });
+    const [first] = within(toolbar).getAllByRole('button');
+    expect(first).toHaveAccessibleName('New');
+
+    await user.click(within(toolbar).getByRole('button', { name: 'New' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Route by sentiment' }));
+
+    expect(await screen.findByRole('group', { name: 'Is positive?' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Prompt 1' })).not.toBeInTheDocument();
+    expect(notifications().getByRole('listitem')).toHaveTextContent('Loaded “Route by sentiment”');
+
+    await user.click(within(toolbar).getByRole('button', { name: 'New' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Blank pipeline' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('group', { name: 'Is positive?' })).not.toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Untitled pipeline' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Start from a template:' })).toBeInTheDocument();
+  });
+});
+
 describe('EditorPage import', () => {
   const imported = addNode(createEmptyPipeline({ id: 'ask', name: 'Ask a question' }), {
     kind: 'input',

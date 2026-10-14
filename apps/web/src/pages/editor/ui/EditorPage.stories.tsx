@@ -104,6 +104,55 @@ export const Empty: Story = {
     await expect(
       canvas.getByText('Drag a node from the palette, or click one, to start your pipeline.'),
     ).toBeVisible();
+    const templates = canvas.getByRole('group', { name: 'Start from a template:' });
+    await expect(
+      within(templates).getByRole('button', { name: 'Route by sentiment' }),
+    ).toBeVisible();
+  },
+};
+
+/**
+ * A template from the empty canvas opens fitted into view, without problems. The widest one fits
+ * this narrow canvas only below React Flow's default zoom limit.
+ */
+export const StartFromTemplate: Story = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('button', { name: 'Extract a JSON field' }));
+
+    await expect(
+      canvas.getByRole('heading', { level: 1, name: 'Extract a JSON field' }),
+    ).toBeVisible();
+    const region = canvas.getByRole('main', { name: 'Pipeline canvas' }).getBoundingClientRect();
+    const isInRegion = ({ left, top, right, bottom }: DOMRect) =>
+      left > region.left && right < region.right && top > region.top && bottom < region.bottom;
+    for (const name of ['Text', 'Extractor', 'Email']) {
+      const node = await canvas.findByRole('group', { name });
+      await waitFor(() => expect(isInRegion(node.getBoundingClientRect())).toBe(true));
+    }
+    await expect(canvas.getByRole('button', { name: 'Problems: none' })).toBeVisible();
+    await expect(canvas.queryByRole('group', { name: 'Start from a template:' })).toBeNull();
+  },
+};
+
+/** The pointer goes through the hint to the canvas, so a node can be dropped on it. */
+export const DropNodeOnHint: Story = {
+  play: async ({ canvas }) => {
+    const hint = canvas.getByText(
+      'Drag a node from the palette, or click one, to start your pipeline.',
+    );
+    const button = canvas.getByRole('button', { name: 'Ask a question' });
+    const buttonCenter = centerOf(button);
+    await expect(button.contains(document.elementFromPoint(buttonCenter.x, buttonCenter.y))).toBe(
+      true,
+    );
+    const dropPoint = centerOf(hint);
+    const target = document.elementFromPoint(dropPoint.x, dropPoint.y);
+    if (target === null) throw new Error('Nothing under the hint');
+    await expect(hint.contains(target)).toBe(false);
+
+    dragAndDrop(canvas.getByRole('button', { name: 'Add Output' }), target, dropPoint);
+
+    await expect(await canvas.findByRole('group', { name: 'Output 1' })).toBeVisible();
   },
 };
 
