@@ -1078,8 +1078,15 @@ describe('runPipeline', () => {
   });
 
   describe('aborting from onEvent', () => {
-    /** Starts a run whose `onEvent` aborts the signal on the first event `abortsOn` matches. */
-    function startAbortingOn(pipeline: Pipeline, abortsOn: (event: RunEvent) => boolean) {
+    /**
+     * Starts a run whose `onEvent` aborts the signal on the first event `abortsOn` matches;
+     * `silently` aborts without calling the signal's listeners.
+     */
+    function startAbortingOn(
+      pipeline: Pipeline,
+      abortsOn: (event: RunEvent) => boolean,
+      { silently = false, ...options }: Partial<RunOptions> & { readonly silently?: boolean } = {},
+    ) {
       const controller = abortController();
       const llm = fakeLlm();
       const events: RunEvent[] = [];
@@ -1092,9 +1099,10 @@ describe('runPipeline', () => {
           reentered ||= reporting;
           reporting = true;
           events.push(event);
-          if (!controller.signal.aborted && abortsOn(event)) controller.abort();
+          if (!controller.signal.aborted && abortsOn(event)) controller.abort({ silently });
           reporting = false;
         },
+        ...options,
       });
       return { result, events, llm, reentered: () => reentered };
     }
@@ -1122,6 +1130,24 @@ describe('runPipeline', () => {
         finished('cancelled'),
       ]);
       expect(run.reentered()).toBe(false);
+    });
+
+    it('starts none of the nodes the reported node made ready', async () => {
+      const asked: string[] = [];
+      const run = startAbortingOn(GREETING, (event) => event.type === 'node-output', {
+        beforeNode: (nodeId) => {
+          asked.push(nodeId);
+          return Promise.resolve();
+        },
+      });
+
+      await expect(run.result).resolves.toMatchObject(ok({ status: 'cancelled' }));
+      expect(asked).toEqual(['name']);
+      expect(statuses(run.events)).toEqual({
+        name: 'done',
+        greeting: 'cancelled',
+        result: 'cancelled',
+      });
     });
 
     it('cancels the nodes left when it aborts on a node done before the end', async () => {
@@ -1193,6 +1219,16 @@ describe('runPipeline', () => {
         cancelled('answer'),
         finished('cancelled'),
       ]);
+    });
+
+    it('sends no request when it aborts, without a signal event, as an LLM Call starts', async () => {
+      const run = startAbortingOn(QUESTION, (event) => isStatus(event, 'running', 'model'), {
+        silently: true,
+      });
+
+      await expect(run.result).resolves.toMatchObject(ok({ status: 'cancelled' }));
+      expect(run.llm.calls).toEqual([]);
+      expect(statuses(run.events)).toMatchObject({ model: 'cancelled', answer: 'cancelled' });
     });
   });
 

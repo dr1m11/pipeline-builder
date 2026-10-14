@@ -36,7 +36,10 @@ export type SkipReason = 'branch-not-taken' | 'upstream-failed';
 
 /**
  * How a run ended: `done`, `error` when a node failed, or `cancelled` when the signal aborted
- * before every node had ended (even if a node had failed).
+ * before every node had ended (even if a node had failed). An abort from inside `onEvent` counts
+ * once the step it arrived in has been reported (see `RunOptions.onEvent`), so it changes nothing
+ * when that step ends the last nodes: their `node-output`, `done` or `error`, or the skips that
+ * follow.
  */
 export type RunOutcome = 'done' | 'error' | 'cancelled';
 
@@ -87,8 +90,8 @@ export interface RunOptions {
    * Receives every event, synchronously, as it happens; it is never called again before it returns.
    * It may abort the signal: the run is cancelled once the engine has reported the change in
    * progress (a node's output and status, and the nodes skipped because of it), so that node still
-   * ends with its own status. An abort once every node has ended, such as on `run-finished` or on
-   * the last node's `done`, changes nothing. Throwing is a bug: the run rejects with the error.
+   * ends with its own status. An abort during the change that ends the last nodes, or on
+   * `run-finished`, changes nothing. Throwing is a bug: the run rejects with the error.
    */
   readonly onEvent: (event: RunEvent) => void;
   /**
