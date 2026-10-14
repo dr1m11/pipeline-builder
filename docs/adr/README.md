@@ -14,3 +14,4 @@ Create a new one from [`template.md`](./template.md) with the next four-digit nu
 | [0007](./0007-zod-schemas-for-node-data-in-core.md)              | Zod schemas for node data in core                                | Accepted |
 | [0008](./0008-graph-validation.md)                               | Graph validation: issues, severities and what blocks a run       | Accepted |
 | [0009](./0009-undo-redo-commands-with-snapshot-history.md)       | Undo/redo: commands with snapshot history                        | Accepted |
+| [0010](./0010-pipeline-files-and-schema-migrations.md)           | Pipeline files and schema migrations                             | Accepted |

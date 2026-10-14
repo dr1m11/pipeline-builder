@@ -78,6 +78,17 @@ export {
   type PipelineNode,
 } from './nodes/registry';
 export { type TransformNodeData, type TransformOperation } from './nodes/transform';
+export { type JsonObject, type JsonValue } from './persistence/json';
+export { type Migration, MIGRATIONS } from './persistence/migrations';
+export {
+  type ParsedPipelineFile,
+  parsePipelineFile,
+  type ParsePipelineFileOptions,
+  PIPELINE_FILE_FORMAT,
+  type PipelineFileError,
+  type PipelineFileRepair,
+  serializePipeline,
+} from './persistence/pipeline-file';
 export {
   createEmptyPipeline,
   parsePipelineName,
