@@ -242,6 +242,26 @@ describe('subscribeToApiKeys', () => {
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
+  it('tells a listener when another tab changes API keys, until it stops listening', () => {
+    const listener = vi.fn();
+    const stop = subscribeToApiKeys(listener);
+    const otherTabChanges = (key: string | null) => {
+      window.dispatchEvent(new StorageEvent('storage', { key, storageArea: device }));
+    };
+
+    otherTabChanges('pb:api-key:openai');
+    expect(listener).toHaveBeenCalledOnce();
+    // The other tab cleared its whole storage.
+    otherTabChanges(null);
+    expect(listener).toHaveBeenCalledTimes(2);
+    otherTabChanges('pb:pipeline');
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    stop();
+    otherTabChanges('pb:api-key:openai');
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
   it('stays quiet when a provider that takes no key is given one', () => {
     const listener = vi.fn();
     const stop = subscribeToApiKeys(listener);

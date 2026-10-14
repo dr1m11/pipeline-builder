@@ -13,14 +13,16 @@ export interface SaveApiKeyOptions {
   readonly remember: boolean;
 }
 
+const STORAGE_KEY_PREFIX = 'pb:api-key:';
+
 /** Storage key under which the API key of `provider` is kept: `pb:api-key:anthropic`. */
 export function apiKeyStorageKey(provider: LlmProvider): string {
-  return `pb:api-key:${provider}`;
+  return `${STORAGE_KEY_PREFIX}${provider}`;
 }
 
 // Keys the browser refused to store (storage blocked or full): they last as long as the page.
 const pageKeys = new Map<LlmProvider, string>();
-// Told about every change made in this tab. Other tabs are not followed.
+// Told about every change made in this tab; `subscribeToApiKeys` adds those of other tabs.
 const listeners = new Set<() => void>();
 
 /**
@@ -86,11 +88,21 @@ export function clearApiKey(provider: LlmProvider): void {
   notify();
 }
 
-/** Calls `listener` after each save or clear in this tab. Returns a function that stops it. */
+/**
+ * Calls `listener` after each save or clear in this tab, and when another tab changes a key
+ * remembered on this device (a `storage` event; session keys belong to their own tab). Returns a
+ * function that stops it.
+ */
 export function subscribeToApiKeys(listener: () => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    // A null key means that the other tab cleared the whole storage.
+    if (event.key === null || event.key.startsWith(STORAGE_KEY_PREFIX)) listener();
+  };
   listeners.add(listener);
+  window.addEventListener('storage', onStorage);
   return () => {
     listeners.delete(listener);
+    window.removeEventListener('storage', onStorage);
   };
 }
 

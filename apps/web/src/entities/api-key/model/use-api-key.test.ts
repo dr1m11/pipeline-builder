@@ -39,6 +39,32 @@ describe('useApiKey', () => {
     expect(result.current).toBeNull();
   });
 
+  it('follows a key that another tab remembers or clears', () => {
+    const { result } = renderHook(() => useApiKey('anthropic'));
+    // What the other tab did, as this tab learns of it: storage first, then a `storage` event.
+    const otherTabSets = (value: string | null) => {
+      if (value === null) window.localStorage.removeItem('pb:api-key:anthropic');
+      else window.localStorage.setItem('pb:api-key:anthropic', value);
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'pb:api-key:anthropic',
+          newValue: value,
+          storageArea: window.localStorage,
+        }),
+      );
+    };
+
+    act(() => {
+      otherTabSets('sk-ant-1');
+    });
+    expect(result.current).toBe('sk-ant-1');
+
+    act(() => {
+      otherTabSets(null);
+    });
+    expect(result.current).toBeNull();
+  });
+
   it('renders again only for changes to its own provider', () => {
     let renders = 0;
     const { result } = renderHook(() => {
