@@ -53,6 +53,7 @@ export {
   redoChange,
   undoChange,
 } from './history/history';
+export { createSseParser, type SseEvent, type SseParser } from './llm/sse-parser';
 export { type ConditionNodeData, type ConditionOperator } from './nodes/condition';
 export { type InputNodeData, type InputValueType } from './nodes/input';
 export { type LlmCallNodeData, type LlmProvider } from './nodes/llm-call';
