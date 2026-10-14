@@ -9,6 +9,8 @@ const badgeVariants = cva(
     variants: {
       tone: {
         neutral: 'bg-surface-muted text-fg-muted',
+        info: 'bg-accent text-accent-fg',
+        success: 'bg-success text-success-fg',
         danger: 'bg-danger text-danger-fg',
         warning: 'bg-warning text-warning-fg',
       },
@@ -22,8 +24,9 @@ const badgeVariants = cva(
 export interface BadgeProps extends ComponentProps<'span'>, VariantProps<typeof badgeVariants> {}
 
 /**
- * A small, non-interactive label, such as a problem count. Colour is never the only signal: pair
- * a tone with an icon, and give a bare number words for screen readers ("2 errors").
+ * A small, non-interactive label, such as a problem count or a run status. Colour is never the
+ * only signal: pair a tone with an icon, and give a bare number words for screen readers ("2
+ * errors").
  */
 export function Badge({ className, tone, ...props }: BadgeProps) {
   return <span className={cn(badgeVariants({ tone }), className)} {...props} />;
