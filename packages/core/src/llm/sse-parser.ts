@@ -25,6 +25,7 @@ export interface SseParser {
 
 // CRLF, a lone LF or a lone CR ends a line.
 const LINE_BREAK = /\r\n?|\n/g;
+const BYTE_ORDER_MARK = '\uFEFF';
 
 /**
  * Creates an incremental parser for the server-sent events format of the WHATWG HTML standard
@@ -34,10 +35,13 @@ const LINE_BREAK = /\r\n?|\n/g;
  * event without data is not dispatched, an `id` with a NULL character is ignored, and `retry` and
  * unknown fields are ignored too.
  *
- * It reads text: callers decode the bytes as UTF-8 first, for example with `TextDecoderStream`,
- * which also removes the byte order mark as the standard's decoding does.
+ * It reads text: callers decode the bytes as UTF-8 first, for example with `TextDecoderStream`. One
+ * byte order mark at the start of the stream is dropped, as the standard's UTF-8 decoding does, so
+ * text from a decoder that keeps it reads the same.
  */
 export function createSseParser(): SseParser {
+  // No piece of the stream has arrived yet, so the next one may start with a byte order mark.
+  let atStreamStart = true;
   // The start of a line whose end has not arrived yet.
   let pending = '';
   // The last piece ended with a CR, so a LF at the start of the next one finishes that line break.
@@ -81,7 +85,11 @@ export function createSseParser(): SseParser {
   return {
     push(chunk) {
       if (chunk === '') return [];
-      const text = afterCarriageReturn && chunk.startsWith('\n') ? chunk.slice(1) : chunk;
+      const skipFirst =
+        (atStreamStart && chunk.startsWith(BYTE_ORDER_MARK)) ||
+        (afterCarriageReturn && chunk.startsWith('\n'));
+      const text = skipFirst ? chunk.slice(1) : chunk;
+      atStreamStart = false;
       afterCarriageReturn = chunk.endsWith('\r');
 
       const events: SseEvent[] = [];
@@ -97,6 +105,7 @@ export function createSseParser(): SseParser {
     },
 
     end() {
+      atStreamStart = true;
       pending = '';
       afterCarriageReturn = false;
       data = '';

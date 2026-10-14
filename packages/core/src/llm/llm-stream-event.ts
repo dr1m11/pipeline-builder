@@ -47,11 +47,14 @@ function eventData(event: LlmStreamEvent): Readonly<Record<string, string>> {
 }
 
 /**
- * Reads an SSE event sent with `formatLlmStreamEvent` back into a stream event. An unknown event
- * name, data that is not a JSON object, or a missing or invalid field is an error with a short
- * description; fields it does not know are dropped.
+ * Reads an SSE event sent with `formatLlmStreamEvent` back into a stream event; its id, if any, is
+ * not used. An unknown event name, data that is not a JSON object, or a missing or invalid field
+ * is an error with a short description; fields it does not know are dropped.
  */
-export function parseLlmStreamEvent({ event, data }: SseEvent): Result<LlmStreamEvent, string> {
+export function parseLlmStreamEvent({
+  event,
+  data,
+}: Pick<SseEvent, 'event' | 'data'>): Result<LlmStreamEvent, string> {
   if (!LLM_STREAM_EVENT_TYPES.has(event)) return err(`Unknown stream event "${event}"`);
 
   let json: JsonValue;

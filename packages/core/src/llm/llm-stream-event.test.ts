@@ -7,9 +7,9 @@ import { formatLlmStreamEvent, type LlmStreamEvent, parseLlmStreamEvent } from '
 import { mockCompletion, splitIntoTokens } from './mock-completion';
 import { createSseParser, type SseEvent } from './sse-parser';
 
-/** An SSE event as the parser returns it, with the id the proxy never sets. */
-function received(event: string, data: string): SseEvent {
-  return { event, data, id: '' };
+/** The name and data of a received SSE event. */
+function received(event: string, data: string): Pick<SseEvent, 'event' | 'data'> {
+  return { event, data };
 }
 
 /** A formatted event as text on the wire, the way a server writes it. */
@@ -94,7 +94,19 @@ describe('parseLlmStreamEvent', () => {
     expect(result.ok ? '' : result.error).toContain(error);
   });
 
-  it('returns a stream event or a message', () => {
+  it('reads an event as the parser returns it, ignoring its id', () => {
+    const event: SseEvent = { event: 'done', data: '{}', id: '7' };
+
+    expect(parseLlmStreamEvent(event)).toEqual({
+      ok: true,
+      value: { type: 'done' },
+    });
+  });
+
+  it('takes the name and data of an SSE event and returns a stream event or a message', () => {
+    expectTypeOf(parseLlmStreamEvent)
+      .parameter(0)
+      .toEqualTypeOf<Pick<SseEvent, 'event' | 'data'>>();
     expectTypeOf(parseLlmStreamEvent).returns.toEqualTypeOf<Result<LlmStreamEvent, string>>();
   });
 });

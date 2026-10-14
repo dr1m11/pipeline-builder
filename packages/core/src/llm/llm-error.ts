@@ -1,3 +1,5 @@
+import * as z from 'zod';
+
 /** Reasons an LLM request can fail, in the order `LlmErrorCode` describes them. */
 export const LLM_ERROR_CODES = [
   'bad-request',
@@ -20,6 +22,23 @@ export const LLM_ERROR_CODES = [
  *   the proxy never sends it.
  */
 export type LlmErrorCode = (typeof LLM_ERROR_CODES)[number];
+
+/**
+ * Body of the JSON error response the proxy sends when it refuses a request before the stream
+ * starts (a request that breaks the rules, too many requests); errors during the stream arrive as
+ * `error` stream events instead.
+ */
+export interface LlmErrorResponse {
+  readonly error: { readonly code: LlmErrorCode; readonly message: string };
+}
+
+/**
+ * Checks an `LlmErrorResponse`: the proxy writes its error bodies with it and the client reads them
+ * with it. Unknown fields are dropped.
+ */
+export const LLM_ERROR_RESPONSE_SCHEMA = z.object({
+  error: z.object({ code: z.enum(LLM_ERROR_CODES), message: z.string() }),
+});
 
 /**
  * Failure of an LLM request, thrown by an `LlmClient`. The message is meant for the user and never

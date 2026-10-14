@@ -8,17 +8,19 @@ function parse(chunks: readonly string[]): SseEvent[] {
   return [...chunks.flatMap((chunk) => parser.push(chunk)), ...parser.end()];
 }
 
+const BOM = '\u{FEFF}';
+
 /** `text` cut at `cuts`, which are positions in ascending order. */
 function cut(text: string, cuts: readonly number[]): string[] {
   return [0, ...cuts].map((start, index) => text.slice(start, cuts[index] ?? text.length));
 }
 
-// Every rule at once, with all three line ends: a comment, a named event, multi-line data, data
-// without the space after the colon or with two, a field without a colon, an id, `retry`, an event
-// without data and an unfinished event at the end.
+// Every rule at once, with all three line ends: a byte order mark, a named event, a comment,
+// multi-line data, data without the space after the colon or with two, a field without a colon, an
+// id, `retry`, an event without data and an unfinished event at the end.
 const STREAM = [
+  '\uFEFFevent: token\r\n',
   ': keep-alive\r\n',
-  'event: token\r\n',
   'data: {"text":"Hi"}\r\n',
   '\r\n',
   'id: 7\n',
@@ -181,5 +183,27 @@ describe('createSseParser', () => {
   it('reads nothing from an empty stream', () => {
     expect(parse([])).toEqual([]);
     expect(parse(['', ''])).toEqual([]);
+  });
+
+  it('drops one byte order mark at the start of the stream, alone or not', () => {
+    const events = [{ event: 'token', data: 'x', id: '' }];
+
+    expect(parse([`${BOM}event: token\ndata: x\n\n`])).toEqual(events);
+    expect(parse(['', BOM, 'event: token\ndata: x\n\n'])).toEqual(events);
+  });
+
+  it('keeps a second byte order mark and one later in the stream as part of a field name', () => {
+    expect(parse([`${BOM}${BOM}data: x\n\n`])).toEqual([]);
+    expect(parse(['data: x\n', `${BOM}data: y\n\n`])).toEqual([
+      { event: 'message', data: 'x', id: '' },
+    ]);
+  });
+
+  it('drops a byte order mark at the start of a new stream after the end', () => {
+    const parser = createSseParser();
+    parser.push(`${BOM}data: old\n\n`);
+    parser.end();
+
+    expect(parser.push(`${BOM}data: new\n\n`)).toEqual([{ event: 'message', data: 'new', id: '' }]);
   });
 });
