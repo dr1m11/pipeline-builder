@@ -1,20 +1,27 @@
 import { parsePipelineFile } from '@pipeline-builder/core';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 
 import { usePipelineStoreApi } from '@/entities/pipeline';
+import { isApplePlatform } from '@/shared/lib/keyboard';
 import { useToast } from '@/shared/ui/toast';
 
-import { describeImportFailure, describeImportSuccess } from '../lib/import-messages';
+import {
+  describeImportFailure,
+  describeImportSuccess,
+  undoImportAltText,
+} from '../lib/import-messages';
 
 /**
  * Returns a function that imports a pipeline file into the surrounding store as one undoable step
  * and says how it went in a toast. A file that cannot be read as a pipeline leaves the pipeline as
  * it was and the toast says why. Replacing a pipeline with nodes offers Undo in the toast, because
- * the history lives in memory only and nothing else keeps the replaced draft (see docs/adr/0009).
+ * the history lives in memory only and nothing else keeps the replaced draft (see docs/adr/0009);
+ * screen readers hear the Ctrl+Z (⌘Z) shortcut instead.
  */
 export function useImportPipeline(): (file: File) => Promise<void> {
   const store = usePipelineStoreApi();
   const { toast } = useToast();
+  const [apple] = useState(() => isApplePlatform());
 
   return useCallback(
     async (file: File) => {
@@ -37,7 +44,7 @@ export function useImportPipeline(): (file: File) => Promise<void> {
       store.getState().replacePipeline(imported, 'import');
       const undo = {
         label: 'Undo',
-        altText: 'Undo the import',
+        altText: undoImportAltText(apple),
         onClick: () => {
           // Only the import: once the pipeline has changed again, or the import was undone
           // already, undo would revert something else.
@@ -50,6 +57,6 @@ export function useImportPipeline(): (file: File) => Promise<void> {
         action: replaced.nodes.length > 0 ? undo : undefined,
       });
     },
-    [store, toast],
+    [store, toast, apple],
   );
 }

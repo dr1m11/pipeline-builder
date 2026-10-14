@@ -7,7 +7,7 @@ import {
 } from '@pipeline-builder/core';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createPipelineStore, PipelineStoreProvider } from '@/entities/pipeline';
 import { ToastProvider } from '@/shared/ui/toast';
@@ -87,6 +87,10 @@ async function findUndoAction(): Promise<HTMLElement> {
 }
 
 describe('ImportButton', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('opens the file picker for pipeline files', async () => {
     const { user, input } = renderImport();
     const openPicker = vi.spyOn(input, 'click');
@@ -121,6 +125,27 @@ describe('ImportButton', () => {
     expect(store.getState().pipeline).toBe(draft);
     expect(notifications().queryByRole('listitem')).not.toBeInTheDocument();
   });
+
+  it.each([
+    ['Win32', 'Press Ctrl+Z to undo the import'],
+    ['MacIntel', 'Press ⌘Z to undo the import'],
+  ])(
+    'tells screen readers on %s the shortcut that undoes the import',
+    async (platform, altText) => {
+      vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform);
+      const { choose } = renderImport();
+
+      await choose(jsonFile(serializePipeline(askQuestion)));
+
+      // Radix announces a new toast in a live region for a moment, the action replaced by its
+      // alternative, as a screen reader may not reach the button in time.
+      await waitFor(() => {
+        const announced = screen.getAllByRole('status').map((status) => status.textContent);
+        expect(announced.join(' | ')).toMatch(/Imported “Ask a question”.*Press/);
+        expect(announced.join(' | ')).toContain(altText);
+      });
+    },
+  );
 
   it('offers no undo when the replaced pipeline was empty', async () => {
     const { choose } = renderImport(createEmptyPipeline({ id: 'draft', name: 'Draft' }));

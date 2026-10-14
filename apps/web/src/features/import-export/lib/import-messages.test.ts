@@ -5,6 +5,7 @@ import {
   describeImportFailure,
   describeImportSuccess,
   type ImportFailure,
+  undoImportAltText,
 } from './import-messages';
 
 const pipeline = createEmptyPipeline({ id: 'imported', name: 'Ask a question' });
@@ -92,5 +93,12 @@ describe('describeImportFailure', () => {
       title: 'Couldn’t import “draft.pipeline.json”',
       description,
     });
+  });
+});
+
+describe('undoImportAltText', () => {
+  it('names the undo shortcut of the platform', () => {
+    expect(undoImportAltText(false)).toBe('Press Ctrl+Z to undo the import');
+    expect(undoImportAltText(true)).toBe('Press ⌘Z to undo the import');
   });
 });
