@@ -42,6 +42,20 @@ function toasts() {
   );
 }
 
+/** "Ask a question" with one Input node. */
+function questionPipeline() {
+  return addNode(createEmptyPipeline({ id: 'saved', name: 'Ask a question' }), {
+    kind: 'input',
+    id: 'question',
+    position: { x: 40, y: 80 },
+  }).pipeline;
+}
+
+/** An edge from a node that is not in the pipeline, which loading drops. */
+function danglingEdge(id: string) {
+  return { id, source: 'gone', sourcePort: 'value', target: 'question', targetPort: 'value' };
+}
+
 function failSaves(name: string) {
   return vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
     throw new DOMException('Storage refused the operation', name);
@@ -66,17 +80,49 @@ describe('useAutosavedStore', () => {
   });
 
   it('starts from the saved pipeline', () => {
-    const saved = addNode(createEmptyPipeline({ id: 'saved', name: 'Ask a question' }), {
-      kind: 'input',
-      id: 'question',
-      position: { x: 40, y: 80 },
-    }).pipeline;
+    const saved = questionPipeline();
     window.localStorage.setItem(DRAFT_STORAGE_KEY, serializePipeline(saved));
 
     const { store } = renderStore();
 
     expect(store.getState().pipeline).toEqual(saved);
     expect(toasts()).toEqual([]);
+  });
+
+  it('tells once that a connection of the saved pipeline was removed, and keeps a copy', () => {
+    const text = serializePipeline({ ...questionPipeline(), edges: [danglingEdge('lost')] });
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, text);
+
+    const { store } = renderStore();
+
+    expect(store.getState().pipeline).toEqual(questionPipeline());
+    const [toast, ...others] = toasts();
+    expect(others).toEqual([]);
+    expect(toast).toHaveTextContent('A connection was removed');
+    expect(toast).toHaveTextContent(
+      '1 connection in your last pipeline pointed at a missing node or an occupied input. A copy of the saved data was kept in this browser.',
+    );
+    expect(window.localStorage.getItem(UNREADABLE_DRAFT_STORAGE_KEY)).toBe(text);
+  });
+
+  it('counts the connections of the saved pipeline that were removed', () => {
+    const edges = [danglingEdge('lost'), danglingEdge('also-lost')];
+    window.localStorage.setItem(
+      DRAFT_STORAGE_KEY,
+      serializePipeline({ ...questionPipeline(), edges }),
+    );
+    failSaves('QuotaExceededError');
+
+    renderStore();
+
+    const [toast, ...others] = toasts();
+    expect(others).toEqual([]);
+    expect(toast).toHaveTextContent('Some connections were removed');
+    expect(toast).toHaveTextContent(
+      '2 connections in your last pipeline pointed at missing nodes or occupied inputs.',
+    );
+    // Without room for a copy, the toast does not promise one.
+    expect(toast).not.toHaveTextContent('A copy of the saved data was kept');
   });
 
   it('saves each change once', () => {

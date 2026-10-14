@@ -11,15 +11,22 @@ import {
 
 /** Where the draft is kept: the pipeline being edited, as the text of a pipeline file. */
 export const DRAFT_STORAGE_KEY = 'pb:pipeline';
-/** Where a draft that cannot be read is moved, so that the next save does not erase it. */
+/**
+ * Where the saved text of a draft that could not be restored as it was (unreadable, or repaired)
+ * is kept, so that the next save does not erase it. It holds the latest such draft only.
+ */
 export const UNREADABLE_DRAFT_STORAGE_KEY = 'pb:pipeline:unreadable';
 
 /** What was found under the draft key. */
 export type DraftLoadResult =
   /** Nothing is saved, or the browser does not give access to storage. */
   | { readonly status: 'empty' }
-  /** The saved pipeline, with what was done to load it (see `parsePipelineFile`). */
-  | ({ readonly status: 'restored' } & ParsedPipelineFile)
+  /**
+   * The saved pipeline, with what was done to load it (see `parsePipelineFile`). When edges had to
+   * be dropped (`repairs`), the next save would lose them for good, so the saved text is copied to
+   * `UNREADABLE_DRAFT_STORAGE_KEY` too; `backedUp` tells whether that copy was made.
+   */
+  | ({ readonly status: 'restored'; readonly backedUp: boolean } & ParsedPipelineFile)
   /**
    * The saved text is not a pipeline this app can read. When `backedUp`, it was moved to
    * `UNREADABLE_DRAFT_STORAGE_KEY`; otherwise it could not be copied and the next save replaces it.
@@ -37,8 +44,9 @@ const EMPTY: DraftLoadResult = { status: 'empty' };
 
 /**
  * Reads the draft from `storage` (`localStorage` by default; null when it is unavailable). A draft
- * that cannot be read is moved to `UNREADABLE_DRAFT_STORAGE_KEY`, replacing an earlier one there,
- * so that it is never overwritten without the user being told.
+ * that cannot be read is moved to `UNREADABLE_DRAFT_STORAGE_KEY`, and a draft that loads only with
+ * repairs is copied there, replacing an earlier one, so that nothing saved is overwritten without
+ * the user being told.
  */
 export function loadDraft(storage: Storage | null = getLocalStorage()): DraftLoadResult {
   if (storage === null) return EMPTY;
@@ -51,8 +59,11 @@ export function loadDraft(storage: Storage | null = getLocalStorage()): DraftLoa
   if (text === null) return EMPTY;
 
   const parsed = parsePipelineFile(text);
-  if (parsed.ok) return { status: 'restored', ...parsed.value };
-  return { status: 'unreadable', error: parsed.error, backedUp: setAside(storage, text) };
+  if (!parsed.ok) {
+    return { status: 'unreadable', error: parsed.error, backedUp: setAside(storage, text) };
+  }
+  const backedUp = parsed.value.repairs.length > 0 && backUp(storage, text);
+  return { status: 'restored', ...parsed.value, backedUp };
 }
 
 /** Saves `pipeline` as the draft in `storage` (`localStorage` by default; null when unavailable). */
@@ -78,13 +89,19 @@ function getLocalStorage(): Storage | null {
   }
 }
 
-/** Copies an unreadable draft to the backup key and frees the draft key; false if it cannot copy. */
-function setAside(storage: Storage, text: string): boolean {
+/** Copies the text of a draft to the backup key; false if it cannot. */
+function backUp(storage: Storage, text: string): boolean {
   try {
     storage.setItem(UNREADABLE_DRAFT_STORAGE_KEY, text);
+    return true;
   } catch {
     return false;
   }
+}
+
+/** Copies an unreadable draft to the backup key and frees the draft key; false if it cannot copy. */
+function setAside(storage: Storage, text: string): boolean {
+  if (!backUp(storage, text)) return false;
   try {
     storage.removeItem(DRAFT_STORAGE_KEY);
   } catch {

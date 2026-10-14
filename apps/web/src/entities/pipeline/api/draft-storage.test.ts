@@ -39,14 +39,17 @@ describe('loadDraft', () => {
       pipeline,
       migratedFrom: null,
       repairs: [],
+      backedUp: false,
     });
+    expect(storage.getItem(UNREADABLE_DRAFT_STORAGE_KEY)).toBeNull();
   });
 
-  it('passes on the repairs made while reading the draft', () => {
+  it('passes on the repairs made while reading the draft and keeps a copy of it', () => {
     const edges = [
       { id: 'lost', source: 'gone', sourcePort: 'value', target: 'input', targetPort: 'value' },
     ];
-    storage.setItem(DRAFT_STORAGE_KEY, serializePipeline({ ...pipelineWithInput(), edges }));
+    const text = serializePipeline({ ...pipelineWithInput(), edges });
+    storage.setItem(DRAFT_STORAGE_KEY, text);
 
     const draft = loadDraft();
 
@@ -54,7 +57,26 @@ describe('loadDraft', () => {
       status: 'restored',
       pipeline: { edges: [] },
       repairs: [{ edgeId: 'lost', reason: 'missing-node' }],
+      backedUp: true,
     });
+    // The draft stays until the next save; the copy outlives it.
+    expect(storage.getItem(DRAFT_STORAGE_KEY)).toBe(text);
+    expect(storage.getItem(UNREADABLE_DRAFT_STORAGE_KEY)).toBe(text);
+  });
+
+  it('restores a repaired draft even when it cannot keep a copy', () => {
+    const edges = [
+      { id: 'lost', source: 'gone', sourcePort: 'value', target: 'input', targetPort: 'value' },
+    ];
+    storage.setItem(DRAFT_STORAGE_KEY, serializePipeline({ ...pipelineWithInput(), edges }));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(failingWith('QuotaExceededError'));
+
+    expect(loadDraft()).toMatchObject({
+      status: 'restored',
+      repairs: [{ edgeId: 'lost', reason: 'missing-node' }],
+      backedUp: false,
+    });
+    expect(storage.getItem(UNREADABLE_DRAFT_STORAGE_KEY)).toBeNull();
   });
 
   it('moves a draft it cannot read aside and frees the draft key', () => {

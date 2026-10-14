@@ -72,7 +72,7 @@ Every change to the persisted shape, oldest first; each row is one entry of `MIG
 - A file from a newer build shows an error instead of opening with fields missing that a later save would erase.
 - An invalid file reports one problem with its path (`nodes[2].data.temperature`): enough to find a hand-editing mistake, not a full report.
 - Fields the format does not define are lost when a file is opened and saved again.
-- The autosaved draft goes through the same parser, so a draft written before a deploy that bumps the version is migrated on the next load. A draft the parser refuses (a newer version after a rollback, damaged text) is moved to `pb:pipeline:unreadable` and reported rather than overwritten by the next save.
+- The autosaved draft goes through the same parser, so a draft written before a deploy that bumps the version is migrated on the next load. A draft the parser refuses (a newer version after a rollback, damaged text) is moved to `pb:pipeline:unreadable` and reported rather than overwritten by the next save. A draft that loads only with repairs is reported too, and its saved text is copied there before the next save replaces it.
 - All tabs of the editor autosave to the same `pb:pipeline` key, so with several tabs open the last save wins and the next load shows only that tab's pipeline. Collaboration in A9 replaces this.
 - Version 2 lands in [#61](https://github.com/dr1m11/pipeline-builder/issues/61): a `provider` field on LLM Call nodes with a migration from version 1, tested against a real version 1 export from production. It adds the first row to [Migrations](#migrations).
 
