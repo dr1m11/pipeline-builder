@@ -1,3 +1,4 @@
+import type { LlmProvider } from '@pipeline-builder/core';
 import { ReactFlowProvider } from '@xyflow/react';
 import { CodeXml } from 'lucide-react';
 import { useState } from 'react';
@@ -7,6 +8,7 @@ import { NodePalette, useNodeDrop } from '@/features/add-node';
 import { useEditSelection } from '@/features/edit-selection';
 import { ExportButton, ImportButton } from '@/features/import-export';
 import { NewPipelineMenu, TemplateButtons } from '@/features/load-template';
+import { ApiKeysButton, ApiKeysDialog } from '@/features/manage-api-keys';
 import { ShortcutsHelp, useShowShortcutsShortcut } from '@/features/show-shortcuts';
 import { ThemeToggle } from '@/features/toggle-theme';
 import { UndoRedoButtons, useUndoRedoShortcuts } from '@/features/undo-redo';
@@ -18,9 +20,17 @@ import { PipelineCanvas } from '@/widgets/pipeline-canvas';
 import { EDITOR_SHORTCUTS } from '../config/shortcuts';
 import { useAutosavedStore } from '../model/use-autosaved-store';
 
+/** Whether the API keys dialog is open, and the provider whose field it focuses. */
+interface ApiKeysDialogState {
+  readonly open: boolean;
+  readonly provider?: LlmProvider;
+}
+
 export function EditorPage() {
   const store = useAutosavedStore();
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
+  // Owned here, not by the header button: a run that needs a key opens the dialog at its provider.
+  const [apiKeysDialog, setApiKeysDialog] = useState<ApiKeysDialogState>({ open: false });
 
   return (
     <PipelineStoreProvider store={store}>
@@ -45,6 +55,18 @@ export function EditorPage() {
                 <UndoRedoButtons />
               </div>
               <span aria-hidden className="h-5 w-px bg-border" />
+              <ApiKeysButton
+                onClick={() => {
+                  setApiKeysDialog({ open: true });
+                }}
+              />
+              <ApiKeysDialog
+                open={apiKeysDialog.open}
+                provider={apiKeysDialog.provider}
+                onOpenChange={(open) => {
+                  setApiKeysDialog((current) => ({ ...current, open }));
+                }}
+              />
               <ShortcutsHelp
                 shortcuts={EDITOR_SHORTCUTS}
                 open={shortcutsHelpOpen}
