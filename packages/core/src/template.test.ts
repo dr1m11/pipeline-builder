@@ -68,6 +68,12 @@ describe('renderTemplate', () => {
     );
   });
 
+  it('fills a variable named __proto__ from an own key', () => {
+    expect(renderTemplate('[{{__proto__}}]', Object.fromEntries([['__proto__', 'own']]))).toBe(
+      '[own]',
+    );
+  });
+
   it('ignores values inherited from the object prototype', () => {
     expect(renderTemplate('{{constructor}} {{toString}}', {})).toBe('{{constructor}} {{toString}}');
   });

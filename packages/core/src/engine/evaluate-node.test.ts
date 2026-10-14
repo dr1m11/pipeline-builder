@@ -36,6 +36,9 @@ function failure(code: EvaluationErrorCode, message: string) {
 
 const NO_VALUE = failure('missing-input', 'Input "value" has no value');
 
+// JSON texts that `JSON.parse` reads with `Infinity` in them, which is not a JSON value.
+const TOO_LARGE = ['1e999', '[1e999]'];
+
 // A value of each type that is not text, with how a message describes it.
 const NOT_TEXT: [JsonValue, string][] = [
   [42, 'a number'],
@@ -87,7 +90,7 @@ describe('evaluateNode', () => {
       expect(evaluateNode(inputNode('json', 'null'), {})).toEqual(ok({ value: null }));
     });
 
-    it.each(['{name: "Ada"}', '[1, 2', 'text', ''])('rejects %j as JSON', (value) => {
+    it.each(['{name: "Ada"}', '[1, 2', 'text', '', ...TOO_LARGE])('rejects %j as JSON', (value) => {
       expect(evaluateNode(inputNode('json', value), {})).toEqual(
         failure('invalid-json', 'Value is not valid JSON'),
       );
@@ -146,8 +149,8 @@ describe('evaluateNode', () => {
       );
     });
 
-    it('fails to parse text that is not valid JSON', () => {
-      expect(evaluateNode(transformNode('parse-json'), { value: 'Sure! {"a": 1}' })).toEqual(
+    it.each(['Sure! {"a": 1}', ...TOO_LARGE])('fails to parse %j as JSON', (value) => {
+      expect(evaluateNode(transformNode('parse-json'), { value })).toEqual(
         failure('invalid-json', 'Input "value" is not valid JSON'),
       );
     });

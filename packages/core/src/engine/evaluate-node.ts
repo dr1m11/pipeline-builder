@@ -4,11 +4,17 @@ import { isBlank } from '../nodes/field-rules';
 import type { InputNodeData } from '../nodes/input';
 import type { NodeOfKind, PipelineNode } from '../nodes/registry';
 import type { TransformNodeData } from '../nodes/transform';
-import { isJsonArray, isJsonObject, type JsonValue } from '../persistence/json';
+import { isJsonArray, isJsonObject, type JsonValue, parseJson } from '../persistence/json';
 import { err, ok, type Result } from '../result';
 import { extractTemplateVariables, renderTemplate } from '../template';
+import { readInput, readText } from './inputs';
 
-/** Values by port id: the inputs of a node by input port id, or its outputs by output port id. */
+/**
+ * Values by port id: the inputs of a node by input port id, or its outputs by output port id.
+ * Build it with own keys only (`Object.fromEntries`, spread, computed keys), never by assigning to
+ * a plain object: assigning to a `__proto__` key, a valid port id, sets the prototype instead and
+ * the value is lost.
+ */
 export type NodeValues = Readonly<Record<string, JsonValue>>;
 
 /** Why a node could not compute its outputs. */
@@ -201,39 +207,4 @@ function childOf(value: JsonValue, name: string): JsonValue | undefined {
   // Own fields only, so `constructor` or `toString` are not found on every object.
   if (isJsonObject(value)) return Object.hasOwn(value, name) ? value[name] : undefined;
   return undefined;
-}
-
-function readInput(inputs: NodeValues, portId: string): Result<JsonValue, NodeEvaluationError> {
-  const value = Object.hasOwn(inputs, portId) ? inputs[portId] : undefined;
-  return value === undefined
-    ? err({ code: 'missing-input', message: `Input "${portId}" has no value` })
-    : ok(value);
-}
-
-function readText(inputs: NodeValues, portId: string): Result<string, NodeEvaluationError> {
-  const value = readInput(inputs, portId);
-  if (!value.ok) return value;
-  if (typeof value.value === 'string') return ok(value.value);
-  const received = describeType(value.value);
-  return err({
-    code: 'not-text',
-    message: `Input "${portId}" needs text but received ${received}; convert it with a Transform node`,
-  });
-}
-
-function describeType(value: JsonValue): string {
-  if (value === null) return 'null';
-  if (isJsonArray(value)) return 'an array';
-  if (typeof value === 'object') return 'an object';
-  return typeof value === 'number' ? 'a number' : 'a boolean';
-}
-
-/** The value of a JSON text, or `undefined` when the text is not valid JSON. */
-function parseJson(text: string): JsonValue | undefined {
-  try {
-    // `JSON.parse` is typed `any`, but it only ever returns JSON values.
-    return JSON.parse(text) as JsonValue;
-  } catch {
-    return undefined;
-  }
 }
