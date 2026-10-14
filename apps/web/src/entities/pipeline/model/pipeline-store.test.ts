@@ -3,6 +3,9 @@ import {
   connect,
   type ConnectionCandidate,
   createEmptyPipeline,
+  EMPTY_HISTORY,
+  findNode,
+  MERGE_WINDOW_MS,
   type Pipeline,
 } from '@pipeline-builder/core';
 import { describe, expect, it, vi } from 'vitest';
@@ -46,6 +49,22 @@ function storeWithListener(pipeline = chain()) {
   const listener = vi.fn();
   store.subscribe(listener);
   return { store, listener };
+}
+
+/** A store whose clock stands still until `advance` moves it. */
+function storeWithClock(pipeline = chain()) {
+  let time = 0;
+  const store = createPipelineStore(pipeline, { createId: () => 'new', now: () => time });
+  return {
+    store,
+    advance: (ms: number) => {
+      time += ms;
+    },
+  };
+}
+
+function labelsOf(entries: readonly { readonly label: string }[]): string[] {
+  return entries.map((entry) => entry.label);
 }
 
 describe('createPipelineStore', () => {
@@ -301,6 +320,19 @@ describe('createPipelineStore', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  it('records nothing for an action that changes nothing', () => {
+    const { store } = storeWithListener();
+
+    const actions = store.getState();
+    actions.moveNodes(new Map([['input', { x: 0, y: 0 }]]));
+    actions.removeElements({ nodeIds: ['missing'] });
+    actions.connect({ source: 'llm', sourcePort: 'response', target: 'llm', targetPort: 'system' });
+    actions.updateNodeData('llm', { temperature: 'warm' });
+    actions.renameNode('prompt', 'Prompt 1');
+
+    expect(store.getState().history).toBe(EMPTY_HISTORY);
+  });
+
   it('keeps no view state for elements outside the pipeline', () => {
     const { store, listener } = storeWithListener();
 
@@ -311,6 +343,179 @@ describe('createPipelineStore', () => {
       edges: new Map([['missing', true]]),
     });
     actions.setMeasured(new Map([['missing', { width: 240, height: 96 }]]));
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('createPipelineStore history', () => {
+  it('records every change of the pipeline with a label', () => {
+    const { store } = storeWithClock();
+    const actions = store.getState();
+
+    actions.addNode('output', { x: 900, y: 0 });
+    actions.moveNodes(new Map([['input', { x: 10, y: 10 }]]));
+    actions.connect({ source: 'llm', sourcePort: 'response', target: 'new', targetPort: 'value' });
+    actions.updateNodeData('llm', { temperature: 1 });
+    actions.renameNode('prompt', 'Ask');
+    actions.removeElements({ edgeIds: ['input-prompt'] });
+
+    expect(labelsOf(store.getState().history.past)).toEqual([
+      'Add Output',
+      'Move Input 1',
+      'Connect LLM Call 1 to Output 1',
+      'Edit Temperature of LLM Call 1',
+      'Rename Prompt 1',
+      'Delete edge from Input 1 to Ask',
+    ]);
+    expect(store.getState().history.future).toEqual([]);
+  });
+
+  it('undoes and redoes a change', () => {
+    const { store } = storeWithClock();
+    const before = store.getState().pipeline;
+    store.getState().updateNodeData('llm', { temperature: 1 });
+    const after = store.getState().pipeline;
+
+    store.getState().undo();
+
+    expect(store.getState().pipeline).toBe(before);
+    expect(labelsOf(store.getState().history.past)).toEqual([]);
+    expect(labelsOf(store.getState().history.future)).toEqual(['Edit Temperature of LLM Call 1']);
+
+    store.getState().redo();
+
+    expect(store.getState().pipeline).toBe(after);
+    expect(labelsOf(store.getState().history.past)).toEqual(['Edit Temperature of LLM Call 1']);
+    expect(store.getState().history.future).toEqual([]);
+  });
+
+  it('makes one step of a field typed within the merge window', () => {
+    const { store, advance } = storeWithClock();
+    const before = store.getState().pipeline;
+
+    for (const template of ['a', 'ab', 'abc']) {
+      store.getState().updateNodeData('prompt', { template });
+      advance(MERGE_WINDOW_MS / 2);
+    }
+
+    expect(labelsOf(store.getState().history.past)).toEqual(['Edit Template of Prompt 1']);
+    store.getState().undo();
+    expect(store.getState().pipeline).toBe(before);
+  });
+
+  it('makes separate steps of edits further apart than the merge window', () => {
+    const { store, advance } = storeWithClock();
+
+    store.getState().renameNode('prompt', 'Ask');
+    advance(MERGE_WINDOW_MS + 1);
+    store.getState().renameNode('prompt', 'Ask more');
+
+    expect(labelsOf(store.getState().history.past)).toEqual(['Rename Prompt 1', 'Rename Ask']);
+  });
+
+  it('records a drag as one step when the nodes are dropped', () => {
+    const { store } = storeWithClock();
+
+    store.getState().dragNodes(new Map([['input', { x: 10, y: 10 }]]));
+    store.getState().dragNodes(new Map([['input', { x: 20, y: 20 }]]));
+    store.getState().moveNodes(new Map([['input', { x: 20, y: 20 }]]));
+
+    expect(labelsOf(store.getState().history.past)).toEqual(['Move Input 1']);
+  });
+
+  it('merges arrow-key nudges of the same node', () => {
+    const { store, advance } = storeWithClock();
+    const before = store.getState().pipeline;
+
+    for (const x of [5, 10, 15]) {
+      store.getState().moveNodes(new Map([['input', { x, y: 0 }]]));
+      advance(100);
+    }
+    store.getState().moveNodes(new Map([['prompt', { x: 305, y: 0 }]]));
+
+    expect(labelsOf(store.getState().history.past)).toEqual(['Move Input 1', 'Move Prompt 1']);
+    store.getState().undo();
+    store.getState().undo();
+    expect(store.getState().pipeline).toBe(before);
+  });
+
+  it('restores removed nodes with their edges on undo', () => {
+    const { store } = storeWithClock();
+    const before = store.getState().pipeline;
+
+    store.getState().removeElements({ nodeIds: ['prompt'] });
+    store.getState().undo();
+
+    const { pipeline } = store.getState();
+    expect(pipeline).toBe(before);
+    expect(pipeline.nodes.map((node) => node.id)).toEqual(['input', 'prompt', 'llm']);
+    expect(pipeline.edges.map((edge) => edge.id)).toEqual(['input-prompt', 'prompt-llm']);
+  });
+
+  it('forgets what could be redone once a new change is made', () => {
+    const { store } = storeWithClock();
+    store.getState().renameNode('prompt', 'Ask');
+    store.getState().undo();
+
+    store.getState().renameNode('llm', 'Model');
+
+    expect(labelsOf(store.getState().history.past)).toEqual(['Rename LLM Call 1']);
+    expect(store.getState().history.future).toEqual([]);
+    store.getState().redo();
+    expect(findNode(store.getState().pipeline, 'prompt')?.label).toBe('Prompt 1');
+  });
+
+  it('drops the view state of a node whose addition is undone', () => {
+    const { store } = storeWithClock();
+    const node = store.getState().addNode('output', { x: 900, y: 0 });
+    store.getState().select({ nodeIds: [node.id, 'input'] });
+    store.getState().setMeasured(new Map([[node.id, { width: 240, height: 96 }]]));
+
+    store.getState().undo();
+
+    const state = store.getState();
+    expect(findNode(state.pipeline, node.id)).toBeUndefined();
+    expect([...state.selectedNodeIds]).toEqual(['input']);
+    expect(state.measured.size).toBe(0);
+  });
+
+  it('keeps the view state of elements that stay', () => {
+    const { store } = storeWithClock();
+    store.getState().select({ nodeIds: ['input'], edgeIds: ['input-prompt'] });
+    store.getState().setMeasured(new Map([['input', { width: 240, height: 96 }]]));
+    const { selectedNodeIds, selectedEdgeIds, measured } = store.getState();
+
+    store.getState().renameNode('input', 'Question');
+    store.getState().undo();
+    store.getState().redo();
+
+    const state = store.getState();
+    expect(state.selectedNodeIds).toBe(selectedNodeIds);
+    expect(state.selectedEdgeIds).toBe(selectedEdgeIds);
+    expect(state.measured).toBe(measured);
+  });
+
+  it('neither undoes nor redoes while nodes are dragged', () => {
+    const { store } = storeWithClock();
+    store.getState().renameNode('prompt', 'Ask');
+    store.getState().renameNode('llm', 'Model');
+    store.getState().undo();
+    const { pipeline, history } = store.getState();
+
+    store.getState().dragNodes(new Map([['input', { x: 10, y: 10 }]]));
+    store.getState().undo();
+    store.getState().redo();
+
+    expect(store.getState().pipeline).toBe(pipeline);
+    expect(store.getState().history).toBe(history);
+  });
+
+  it('notifies nobody when there is nothing to undo or redo', () => {
+    const { store, listener } = storeWithListener();
+
+    store.getState().undo();
+    store.getState().redo();
 
     expect(listener).not.toHaveBeenCalled();
   });

@@ -24,6 +24,34 @@ function dragAndDrop(source: Element, target: Element, at: Point): void {
   source.dispatchEvent(new DragEvent('dragend', init));
 }
 
+// React Flow drags nodes with d3-drag, which needs `event.view`; user-event leaves it unset, so
+// the node is dragged with mouse events dispatched the way a browser does.
+function mouse(type: string, target: EventTarget, at: Point): void {
+  target.dispatchEvent(
+    new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      clientX: at.x,
+      clientY: at.y,
+    }),
+  );
+}
+
+/** Picks a node up, moves it by `by` in several steps and drops it. */
+function dragNode(node: HTMLElement, by: Point): void {
+  const start = centerOf(node);
+  // React Flow starts a drag once the pointer has moved, and that first move does not move the node.
+  const pickup = { x: start.x, y: start.y + 4 };
+  mouse('mousedown', node, start);
+  mouse('mousemove', window, pickup);
+  for (const step of [0.25, 0.5, 0.75, 1]) {
+    mouse('mousemove', window, { x: pickup.x + by.x * step, y: pickup.y + by.y * step });
+  }
+  mouse('mouseup', window, { x: pickup.x + by.x, y: pickup.y + by.y });
+}
+
 const meta = {
   title: 'pages/Editor',
   component: EditorPage,
@@ -114,5 +142,29 @@ export const AddNodeWithClick: Story = {
 
     await expect(await canvas.findByRole('group', { name: 'LLM Call 1' })).toBeVisible();
     await expect(canvas.getByRole('status')).toHaveTextContent('Added LLM Call 1');
+  },
+};
+
+export const UndoDrag: Story = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('button', { name: 'Add Input' }));
+    const node = await canvas.findByRole('group', { name: 'Input 1' });
+    await waitFor(() => expect(node).toBeVisible());
+    const before = node.getBoundingClientRect();
+
+    dragNode(node, { x: 80, y: 120 });
+
+    // The whole drag is one step, and undoing it puts the node back where it was.
+    const toolbar = canvas.getByRole('toolbar', { name: 'Edit' });
+    await userEvent.click(
+      await within(toolbar).findByRole('button', { name: 'Undo Move Input 1' }),
+    );
+    await waitFor(async () => {
+      const after = node.getBoundingClientRect();
+      await expect(after.left).toBeCloseTo(before.left, 0);
+      await expect(after.top).toBeCloseTo(before.top, 0);
+    });
+    await expect(within(toolbar).getByRole('button', { name: 'Undo Add Input' })).toBeEnabled();
+    await expect(within(toolbar).getByRole('button', { name: 'Redo Move Input 1' })).toBeEnabled();
   },
 };

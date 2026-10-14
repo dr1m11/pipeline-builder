@@ -28,6 +28,16 @@ export const Disabled: Story = {
   args: { disabled: true, label: 'Redo', children: <Redo2 aria-hidden /> },
 };
 
+export const WithShortcut: Story = {
+  args: { label: 'Undo Move 3 nodes', shortcut: ['Ctrl', 'Z'] },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'Undo Move 3 nodes' })).toHaveFocus();
+    // The tooltip is portalled to <body>, outside the story canvas.
+    await expect(await screen.findByRole('tooltip')).toHaveTextContent('Undo Move 3 nodes Ctrl Z');
+  },
+};
+
 export const TooltipOnFocus: Story = {
   play: async ({ canvas, userEvent }) => {
     await userEvent.tab();

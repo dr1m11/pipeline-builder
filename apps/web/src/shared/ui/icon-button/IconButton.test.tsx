@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Undo2 } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -33,6 +33,21 @@ describe('IconButton', () => {
     await user.tab();
     expect(screen.getByRole('button', { name: 'Undo' })).toHaveFocus();
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Undo');
+  });
+
+  it('shows the keys of its shortcut in the tooltip', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(
+      <IconButton label="Undo" shortcut={['Ctrl', 'Z']}>
+        <Undo2 aria-hidden />
+      </IconButton>,
+    );
+
+    await user.tab();
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Undo Ctrl Z');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+    expect(within(tooltip).getByText('Ctrl').tagName).toBe('KBD');
   });
 
   it('forwards clicks', async () => {
