@@ -5,6 +5,7 @@ import {
   executeCommand,
   findNode,
   type History,
+  type HistoryEntry,
   type HistoryStep,
   type NodeKind,
   type Pipeline,
@@ -13,6 +14,7 @@ import {
   type Position,
   recordChange,
   redoChange,
+  type ReplacePipelineCommand,
   undoChange,
   validateConnection,
 } from '@pipeline-builder/core';
@@ -51,6 +53,11 @@ export interface PipelineState extends ViewState {
   readonly pipeline: Pipeline;
   /** Changes of the pipeline that can be undone and redone (see docs/adr/0009). */
   readonly history: History;
+  /**
+   * Grows by one whenever the whole document is replaced: by `replacePipeline`, and by an undo or a
+   * redo of such a replacement. The canvas fits its view to each new document.
+   */
+  readonly documentKey: number;
 }
 
 /**
@@ -82,6 +89,11 @@ export interface PipelineActions {
   undo: () => void;
   /** Applies the last undone change again. Ignored while nodes are dragged. */
   redo: () => void;
+  /**
+   * Replaces the whole document (an import, a template, a new pipeline) in one undoable step and
+   * clears the selection, sizes and drag positions of the replaced one.
+   */
+  replacePipeline: (pipeline: Pipeline, reason: ReplacePipelineCommand['reason']) => void;
   updateSelection: (changes: SelectionChanges) => void;
   /** Makes these elements, and only these, the selection. */
   select: (ids: ElementIds) => void;
@@ -96,6 +108,14 @@ export interface PipelineStoreOptions {
   /** Current time in ms, which decides what merges in the history; `Date.now()` by default. */
   readonly now?: () => number;
 }
+
+/** View state of a document just opened: nothing selected, measured or dragged. */
+const EMPTY_VIEW_STATE: ViewState = {
+  selectedNodeIds: new Set(),
+  selectedEdgeIds: new Set(),
+  measured: new Map(),
+  dragPositions: new Map(),
+};
 
 /**
  * Creates the store that holds a pipeline being edited. Every change of the pipeline is a core
@@ -120,6 +140,7 @@ export function createPipelineStore(
       set({
         pipeline: next,
         history: recordChange(state.history, entry),
+        documentKey: nextDocumentKey(state.documentKey, entry),
         ...pruneViewState({ ...state, ...view }, next),
       });
       return true;
@@ -128,16 +149,19 @@ export function createPipelineStore(
     /** Shows the document of an undo or a redo and keeps the history it leaves. */
     const applyStep = (step: HistoryStep | null): void => {
       if (step === null) return;
+      const state = get();
       set({
         pipeline: step.pipeline,
         history: step.history,
-        ...pruneViewState(get(), step.pipeline),
+        documentKey: nextDocumentKey(state.documentKey, step.entry),
+        ...pruneViewState(state, step.pipeline),
       });
     };
 
     return {
       pipeline,
       history: EMPTY_HISTORY,
+      documentKey: 0,
       selectedNodeIds: new Set(),
       selectedEdgeIds: new Set(),
       measured: new Map(),
@@ -199,6 +223,10 @@ export function createPipelineStore(
         if (state.dragPositions.size === 0) applyStep(redoChange(state.history));
       },
 
+      replacePipeline: (next, reason) => {
+        execute({ type: 'replace-pipeline', pipeline: next, reason }, EMPTY_VIEW_STATE);
+      },
+
       updateSelection: (changes) => {
         const state = get();
         const { pipeline: current } = state;
@@ -253,6 +281,11 @@ export function createPipelineStore(
       },
     };
   });
+}
+
+/** The document key after `entry` was made, undone or redone: it changes with the whole document. */
+function nextDocumentKey(documentKey: number, entry: HistoryEntry): number {
+  return entry.replacesDocument ? documentKey + 1 : documentKey;
 }
 
 /**

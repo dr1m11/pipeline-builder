@@ -18,6 +18,7 @@ import { usePipelineStoreApi } from '@/entities/pipeline';
 import { translateEdgeChanges, translateNodeChanges } from '../model/flow-changes';
 import { toConnectionCandidate } from '../model/flow-connections';
 import type { PipelineFlowEdge } from '../model/flow-elements';
+import { useFitReplacedDocument } from '../model/use-fit-replaced-document';
 import { useFlowElements } from '../model/use-flow-elements';
 
 // Module-level so React Flow does not see new node types, or new keys, on every render.
@@ -93,6 +94,17 @@ export function PipelineCanvas() {
       <Background />
       <Controls />
       <MiniMap ariaLabel="Pipeline overview" />
+      <FitReplacedDocument />
     </ReactFlow>
   );
+}
+
+/**
+ * Fits the view to each document that replaces the pipeline. A child of `<ReactFlow>`, so it has
+ * React Flow's provider even where the page does not wrap the canvas in one. The canvas is never
+ * remounted for a new document instead: that would reset the page's `ReactFlowProvider`.
+ */
+function FitReplacedDocument() {
+  useFitReplacedDocument();
+  return null;
 }

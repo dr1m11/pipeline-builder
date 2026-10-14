@@ -7,6 +7,7 @@ import {
 } from '@pipeline-builder/core';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ReactFlowProvider, useViewport } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';
 
 import { createPipelineStore, PipelineStoreProvider } from '@/entities/pipeline';
@@ -160,5 +161,103 @@ describe('PipelineCanvas', () => {
     await activatePort(user, 'Output 1', 'Input value (any)');
 
     expect(port('LLM Call 1', 'Input prompt (text)')).not.toHaveAttribute('aria-disabled');
+  });
+});
+
+/** The canvas's viewport as text, rounded: "x y zoom". */
+function ViewportStatus() {
+  const { x, y, zoom } = useViewport();
+  return (
+    <output aria-label="Viewport">{`${String(Math.round(x))} ${String(Math.round(y))} ${zoom.toFixed(2)}`}</output>
+  );
+}
+
+/** The canvas inside the page's React Flow provider, with its viewport readable as text. */
+function renderCanvasWithViewport(pipeline: Pipeline) {
+  const store = createPipelineStore(pipeline, { createId: () => 'new' });
+  render(
+    <PipelineStoreProvider store={store}>
+      <ReactFlowProvider>
+        <div style={{ width: 1200, height: 600 }}>
+          <PipelineCanvas />
+        </div>
+        <ViewportStatus />
+      </ReactFlowProvider>
+    </PipelineStoreProvider>,
+  );
+  const viewport = () => {
+    const [x = Number.NaN, y = Number.NaN, zoom = Number.NaN] = screen
+      .getByRole('status', { name: 'Viewport' })
+      .textContent.split(' ')
+      .map(Number);
+    return { x, y, zoom };
+  };
+  return { store, viewport };
+}
+
+/** One Output node far to the right of where the canvas opens. */
+function farAway(): Pipeline {
+  return addNode(createEmptyPipeline({ id: 'far', name: 'Far away' }), {
+    kind: 'output',
+    id: 'far',
+    position: { x: 5000, y: 3000 },
+  }).pipeline;
+}
+
+describe('PipelineCanvas view of a replaced document', () => {
+  it('fits the view to a pipeline that replaces the document, and again on undo', async () => {
+    const { store, viewport } = renderCanvasWithViewport(chain());
+    await screen.findByRole('group', { name: 'Prompt 1' });
+
+    act(() => {
+      store.getState().replacePipeline(farAway(), 'import');
+    });
+
+    expect(await screen.findByRole('group', { name: 'Output 1' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(viewport().x).toBeLessThan(-1000);
+    });
+    expect(viewport().y).toBeLessThan(-1000);
+
+    act(() => {
+      store.getState().undo();
+    });
+
+    await waitFor(() => {
+      expect(viewport().x).toBeGreaterThan(-1000);
+    });
+    expect(viewport().y).toBeGreaterThan(-1000);
+  });
+
+  it('returns to the default view for an empty pipeline', async () => {
+    const { store, viewport } = renderCanvasWithViewport(farAway());
+    await screen.findByRole('group', { name: 'Output 1' });
+    await waitFor(() => {
+      expect(viewport().x).toBeLessThan(-1000);
+    });
+
+    act(() => {
+      store.getState().replacePipeline(createEmptyPipeline({ id: 'new', name: 'New' }), 'new');
+    });
+
+    await waitFor(() => {
+      expect(viewport()).toEqual({ x: 0, y: 0, zoom: 1 });
+    });
+  });
+
+  it('keeps the view while the document only changes', async () => {
+    const { store, viewport } = renderCanvasWithViewport(chain());
+    await screen.findByRole('group', { name: 'Prompt 1' });
+    await waitFor(() => {
+      expect(viewport().zoom).not.toBe(1);
+    });
+    const opened = viewport();
+
+    act(() => {
+      store.getState().addNode('output', { x: 5000, y: 3000 });
+    });
+
+    expect(await screen.findByRole('group', { name: 'Output 1' })).toBeInTheDocument();
+    expect(viewport()).toEqual(opened);
   });
 });
