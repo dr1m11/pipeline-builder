@@ -5,6 +5,7 @@ import { PipelineStoreProvider, usePipelineStore } from '@/entities/pipeline';
 import { NodePalette, useNodeDrop } from '@/features/add-node';
 import { useEditSelection } from '@/features/edit-selection';
 import { ExportButton, ImportButton } from '@/features/import-export';
+import { NewPipelineMenu, TemplateButtons } from '@/features/load-template';
 import { ThemeToggle } from '@/features/toggle-theme';
 import { UndoRedoButtons, useUndoRedoShortcuts } from '@/features/undo-redo';
 import { REPOSITORY_URL } from '@/shared/config';
@@ -27,6 +28,7 @@ export function EditorPage() {
             <PipelineName />
             <div className="flex items-center gap-2">
               <div role="toolbar" aria-label="File" className="flex items-center gap-1">
+                <NewPipelineMenu />
                 <ImportButton />
                 <ExportButton />
               </div>
@@ -91,9 +93,11 @@ function EmptyCanvasHint() {
   const isEmpty = usePipelineStore((state) => state.pipeline.nodes.length === 0);
   if (!isEmpty) return null;
   return (
-    // Lets pointer events through to the canvas, so a node can be dropped on the hint too.
-    <p className="pointer-events-none absolute inset-x-0 top-1/2 z-10 mx-auto w-fit -translate-y-1/2 rounded-lg border border-dashed border-border bg-surface px-4 py-3 text-sm text-fg-muted">
-      Drag a node from the palette, or click one, to start your pipeline.
-    </p>
+    // Lets pointer events through to the canvas, so a node can be dropped on the hint too; only
+    // the template buttons take them.
+    <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 mx-auto flex w-fit max-w-[calc(100%-2rem)] -translate-y-1/2 flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-surface px-4 py-3 text-center text-sm text-fg-muted">
+      <p>Drag a node from the palette, or click one, to start your pipeline.</p>
+      <TemplateButtons className="[&_button]:pointer-events-auto" />
+    </div>
   );
 }

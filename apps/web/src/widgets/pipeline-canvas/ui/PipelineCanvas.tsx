@@ -24,6 +24,9 @@ import { useFlowElements } from '../model/use-flow-elements';
 // Module-level so React Flow does not see new node types, or new keys, on every render.
 const NODE_TYPES = { [PIPELINE_NODE_TYPE]: PipelineNodeView } satisfies NodeTypes;
 const DELETE_KEYS = ['Backspace', 'Delete'];
+// React Flow's default of 0.5 is too close for a fit to show the widest template (six cards in a
+// row) on the narrowest supported canvas.
+const MIN_ZOOM = 0.2;
 
 /**
  * Ends a text selection elsewhere on the page, as pressing any other content does. Nothing on the
@@ -99,6 +102,7 @@ export function PipelineCanvas() {
       isValidConnection={isValidConnection}
       onConnect={onConnect}
       deleteKeyCode={DELETE_KEYS}
+      minZoom={MIN_ZOOM}
       fitView={fitView}
       onPointerDownCapture={clearTextSelection}
     >
