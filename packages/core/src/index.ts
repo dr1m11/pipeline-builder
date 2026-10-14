@@ -104,6 +104,11 @@ export {
   type PipelineNameError,
 } from './pipeline';
 export {
+  PIPELINE_TEMPLATES,
+  type PipelineTemplate,
+  type PipelineTemplateId,
+} from './pipeline-templates/pipeline-templates';
+export {
   arePortTypesCompatible,
   type NodePorts,
   PORT_TYPES,
