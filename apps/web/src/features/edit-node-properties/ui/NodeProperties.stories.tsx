@@ -65,6 +65,10 @@ export const InputWithErrors: Story = {
 export const LlmCall: Story = {
   args: { kind: 'llm-call' },
   play: async ({ canvas, userEvent }) => {
+    await expect(canvas.getByRole('combobox', { name: 'Provider' })).toHaveDisplayValue(
+      'Mock (no API key)',
+    );
+
     const temperature = canvas.getByRole('spinbutton', { name: 'Temperature' });
     await userEvent.clear(temperature);
     await userEvent.type(temperature, '5');
