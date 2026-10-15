@@ -6,6 +6,7 @@ import {
   LLM_CALL_DATA_SCHEMA,
   LLM_CALL_DEFINITION,
   LLM_CALL_RULES_SCHEMA,
+  LLM_MODEL_MAX_LENGTH,
   LLM_PROVIDER_INFO,
   LLM_PROVIDERS,
   type LlmCallNodeData,
@@ -197,6 +198,14 @@ describe('LLM_CALL_RULES_SCHEMA', () => {
 
   it('requires a model that is not blank', () => {
     expect(ruleMessages({ model: ' ' })).toEqual({ model: ['Required'] });
+  });
+
+  it('accepts a model id of up to 200 characters and rejects a longer one', () => {
+    expect(LLM_MODEL_MAX_LENGTH).toBe(200);
+    expect(ruleMessages({ model: 'm'.repeat(LLM_MODEL_MAX_LENGTH) })).toEqual({});
+    expect(ruleMessages({ model: 'm'.repeat(LLM_MODEL_MAX_LENGTH + 1) })).toEqual({
+      model: ['Must be at most 200 characters'],
+    });
   });
 
   it.each([0, 2])('accepts the temperature %d', (temperature) => {

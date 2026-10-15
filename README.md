@@ -33,7 +33,7 @@ Available now:
 
 Planned (A5 onward):
 
-- Execution: a mock provider that needs no key or your own API key through an SSE proxy, tokens streaming into the nodes, cancellation (A5)
+- Execution: a mock provider that needs no key, or Anthropic and OpenAI with your own API key through an SSE proxy, tokens streaming into the nodes, cancellation (A5)
 - Auto-layout in a Web Worker and 500+ nodes at 60 FPS (A6)
 - Real-time collaboration with Yjs (A9)
 

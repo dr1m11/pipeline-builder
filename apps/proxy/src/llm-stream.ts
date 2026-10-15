@@ -17,7 +17,7 @@ import { streamSSE } from 'hono/streaming';
 
 import { apiError } from './api-error';
 import type { Bindings } from './bindings';
-import type { Provider, Providers } from './providers/provider';
+import type { Provider, ProviderContext, Providers } from './providers/provider';
 
 type AppContext = Context<{ Bindings: Bindings }>;
 
@@ -50,25 +50,43 @@ export const limitRequestBody = bodyLimit({
     ),
 });
 
+/** How often an event stream gets a comment line, which keeps it from looking idle. */
+export const HEARTBEAT_INTERVAL_MS = 15_000;
+
+// An SSE comment: clients skip it, while proxies and browsers see the connection is alive.
+const HEARTBEAT = ': ping\n\n';
+
 /**
  * Handles `POST /api/llm/stream`, after `limitLlmRequests` and `limitRequestBody`. It checks the
- * body, an `LlmRequest` as JSON, and the stricter rate limit for real models, and answers a failed
- * check with a JSON error (400 or 429). Then it streams the provider's answer as SSE
- * `LlmStreamEvent`s (`Content-Type: text/event-stream`), which always end with `done` or `error`
- * unless the client disconnects; a disconnect stops the provider.
+ * body, an `LlmRequest` as JSON; a provider that needs the user's key gets it from the
+ * `Authorization: Bearer` header, and only such a provider; then the stricter rate limit for real
+ * models. A failed check gets a JSON error: 400, 401 `invalid-key` without a key, or 429. Then it
+ * streams the provider's answer as SSE `LlmStreamEvent`s (`Content-Type: text/event-stream`),
+ * which always end with `done` or `error` unless the client disconnects; a disconnect stops the
+ * provider. A comment every `HEARTBEAT_INTERVAL_MS` keeps the connection from looking idle while a
+ * model thinks before it answers.
  */
 export function createLlmStreamHandler(providers: Providers) {
   return async (c: AppContext): Promise<Response> => {
     const request = await readLlmRequest(c);
     if (!request.ok) return apiError(c, 400, 'bad-request', request.error);
 
-    // A provider that needs the user's key calls a real model: it gets the stricter limit too.
-    const { needsApiKey } = LLM_PROVIDER_INFO[request.value.provider];
-    if (
-      needsApiKey &&
-      !(await c.env.REAL_PROVIDER_RATE_LIMITER.limit({ key: clientAddress(c) })).success
-    ) {
-      return rateLimited(c);
+    const { needsApiKey, title } = LLM_PROVIDER_INFO[request.value.provider];
+    // The mock never gets a key, even when the client sends one.
+    const apiKey = needsApiKey ? bearerToken(c) : undefined;
+    if (needsApiKey) {
+      if (apiKey === undefined) {
+        return apiError(
+          c,
+          401,
+          'invalid-key',
+          `${title} needs your API key. Add it and try again.`,
+        );
+      }
+      // A provider that needs the user's key calls a real model: it gets the stricter limit too.
+      if (!(await c.env.REAL_PROVIDER_RATE_LIMITER.limit({ key: clientAddress(c) })).success) {
+        return rateLimited(c);
+      }
     }
 
     const provider = providers[request.value.provider];
@@ -77,8 +95,19 @@ export function createLlmStreamHandler(providers: Providers) {
       stream.onAbort(() => {
         disconnect.abort();
       });
-      for await (const event of answerEvents(provider, request.value, disconnect.signal)) {
-        await stream.writeSSE(formatLlmStreamEvent(event));
+      const context: ProviderContext =
+        apiKey === undefined
+          ? { signal: disconnect.signal }
+          : { signal: disconnect.signal, apiKey };
+      const heartbeat = setInterval(() => {
+        void stream.write(HEARTBEAT);
+      }, HEARTBEAT_INTERVAL_MS);
+      try {
+        for await (const event of answerEvents(provider, request.value, context)) {
+          await stream.writeSSE(formatLlmStreamEvent(event));
+        }
+      } finally {
+        clearInterval(heartbeat);
       }
     });
   };
@@ -87,6 +116,12 @@ export function createLlmStreamHandler(providers: Providers) {
 // The key of both rate limits. Cloudflare sets the header on every request it forwards.
 function clientAddress(c: AppContext): string {
   return c.req.header('cf-connecting-ip') ?? 'unknown';
+}
+
+// The token of an `Authorization: Bearer <token>` header, or undefined when there is none.
+function bearerToken(c: AppContext): string | undefined {
+  const token = /^Bearer\s+(.*)$/i.exec(c.req.header('authorization')?.trim() ?? '')?.[1]?.trim();
+  return token === '' ? undefined : token;
 }
 
 function rateLimited(c: AppContext): Response {
@@ -125,16 +160,17 @@ async function readLlmRequest(c: AppContext): Promise<Result<LlmRequest, string>
 async function* answerEvents(
   provider: Provider | undefined,
   request: LlmRequest,
-  signal: AbortSignal,
+  context: ProviderContext,
 ): AsyncGenerator<LlmStreamEvent, void, undefined> {
   if (provider === undefined) {
     const { title } = LLM_PROVIDER_INFO[request.provider];
-    yield { type: 'error', code: 'bad-request', message: `${title} is not available yet` };
+    yield { type: 'error', code: 'bad-request', message: `${title} is not available` };
     return;
   }
 
+  const { signal } = context;
   try {
-    for await (const text of provider.stream(request, { signal })) {
+    for await (const text of provider.stream(request, context)) {
       if (signal.aborted) return;
       yield { type: 'token', text };
     }

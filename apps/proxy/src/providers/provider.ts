@@ -4,6 +4,13 @@ import type { LlmProvider, LlmRequest } from '@pipeline-builder/core';
 export interface ProviderContext {
   /** Aborts when the client disconnects: the provider stops streaming and lets go of upstream. */
   readonly signal: AbortSignal;
+  /**
+   * The user's API key, from the `Authorization: Bearer` header of the proxy request. Only a
+   * provider that needs one (`LLM_PROVIDER_INFO`) gets it, and the proxy has checked that it is
+   * not blank. It goes to that provider's API and nowhere else: never into a log, an error message
+   * or an error's cause.
+   */
+  readonly apiKey?: string;
 }
 
 /** A source of model answers the stream endpoint can use. */
