@@ -19,6 +19,23 @@ describe('Badge', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it('renders every tone as plain text', () => {
+    render(
+      <p>
+        {(['neutral', 'info', 'success', 'danger', 'warning'] as const).map((tone) => (
+          <Badge key={tone} tone={tone}>
+            {tone}
+          </Badge>
+        ))}
+      </p>,
+    );
+
+    for (const tone of ['neutral', 'info', 'success', 'danger', 'warning']) {
+      expect(screen.getByText(tone).tagName).toBe('SPAN');
+    }
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('merges a custom className', () => {
     render(<Badge className="ml-auto">3</Badge>);
     expect(screen.getByText('3')).toHaveClass('ml-auto');

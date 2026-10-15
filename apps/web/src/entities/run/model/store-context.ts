@@ -1,6 +1,8 @@
+import type { NodeRunStatus } from '@pipeline-builder/core';
 import { createContext, use } from 'react';
 import { useStore } from 'zustand';
 
+import { type EdgeEnds, type EdgeFlow, edgeFlow } from './edge-flow';
 import { IDLE_NODE_RUN, type NodeRunState, type RunState } from './run-state';
 import type { RunActions, RunStore } from './run-store';
 
@@ -27,4 +29,20 @@ export function useRunStore<T>(selector: (state: RunState & RunActions) => T): T
  */
 export function useNodeRun(nodeId: string): NodeRunState {
   return useRunStore((state) => state.nodes.get(nodeId) ?? IDLE_NODE_RUN);
+}
+
+/**
+ * The run status of the node `nodeId` (`idle` when the run has not reported it). Unlike
+ * `useNodeRun`, the component does not re-render while the node streams its response.
+ */
+export function useNodeRunStatus(nodeId: string): NodeRunStatus {
+  return useRunStore((state) => state.nodes.get(nodeId)?.status ?? 'idle');
+}
+
+/**
+ * What the current run did with an edge (see `EdgeFlow`). The component re-renders only when that
+ * changes, not on every token the run streams.
+ */
+export function useEdgeFlow(ends: EdgeEnds): EdgeFlow {
+  return useRunStore((state) => edgeFlow(state, ends));
 }

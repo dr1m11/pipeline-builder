@@ -22,6 +22,7 @@
   --color-warning: var(--pb-warning);
   --color-warning-fg: var(--pb-warning-fg);
   --color-success: var(--pb-success);
+  --color-success-fg: var(--pb-success-fg);
   --color-focus: var(--pb-focus);
   --shadow-elevated: var(--pb-shadow);
   --color-overlay: var(--pb-overlay);

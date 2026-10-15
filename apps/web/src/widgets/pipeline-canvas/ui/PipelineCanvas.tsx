@@ -2,6 +2,7 @@ import {
   Background,
   Controls,
   type EdgeChange,
+  type EdgeTypes,
   type IsValidConnection,
   MiniMap,
   type NodeChange,
@@ -12,7 +13,7 @@ import {
 } from '@xyflow/react';
 import { useCallback, useState } from 'react';
 
-import { PIPELINE_NODE_TYPE, type PipelineFlowNode, PipelineNodeView } from '@/entities/node';
+import { PIPELINE_NODE_TYPE, type PipelineFlowNode } from '@/entities/node';
 import { usePipelineStoreApi } from '@/entities/pipeline';
 
 import { DELETE_KEYS } from '../config/shortcuts';
@@ -21,10 +22,14 @@ import { toConnectionCandidate } from '../model/flow-connections';
 import type { PipelineFlowEdge } from '../model/flow-elements';
 import { useFitReplacedDocument } from '../model/use-fit-replaced-document';
 import { useFlowElements } from '../model/use-flow-elements';
+import { CanvasEdge } from './CanvasEdge';
+import { CanvasNode } from './CanvasNode';
 
-// Module-level so React Flow does not see new node types on every render; the delete keys are
-// module-level in config for the same reason.
-const NODE_TYPES = { [PIPELINE_NODE_TYPE]: PipelineNodeView } satisfies NodeTypes;
+// Module-level so React Flow does not see new node and edge types on every render; the delete keys
+// are module-level in config for the same reason. Edges have no type of their own: the default one
+// is replaced.
+const NODE_TYPES = { [PIPELINE_NODE_TYPE]: CanvasNode } satisfies NodeTypes;
+const EDGE_TYPES = { default: CanvasEdge } satisfies EdgeTypes;
 // React Flow's default of 0.5 is too close for a fit to show the widest template (six cards in a
 // row) on the narrowest supported canvas.
 const MIN_ZOOM = 0.2;
@@ -42,7 +47,8 @@ function clearTextSelection(): void {
 /**
  * The pipeline from the surrounding store on a React Flow canvas. React Flow is a controlled view:
  * it reports changes, the store applies them through core operations, and the canvas re-renders
- * from the store (see docs/adr/0006).
+ * from the store (see docs/adr/0006). Nodes and edges also show what the run in the surrounding
+ * run store does: statuses, streamed text, and the edges that carry data.
  */
 export function PipelineCanvas() {
   const store = usePipelineStoreApi();
@@ -97,6 +103,7 @@ export function PipelineCanvas() {
       nodes={nodes}
       edges={edges}
       nodeTypes={NODE_TYPES}
+      edgeTypes={EDGE_TYPES}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onDelete={onDelete}

@@ -27,18 +27,22 @@ const TEXT_INPUT_TYPES: ReadonlySet<string> = new Set([
 
 const EDITABLE = '[contenteditable]:not([contenteditable="false"])';
 
-// A dialog or a menu handles its keys itself. React Flow's `.nokey` is not checked: it only keeps
-// the canvas's own keys (Delete, arrows, Enter) off an element, and a focused port or toast should
-// still undo with Ctrl+Z.
-const OWNS_KEYS = '[role="dialog"], [role="alertdialog"], [role="menu"]';
+// A dialog, a menu or an open list of options (a Select's) handles its keys itself. React Flow's
+// `.nokey` is not checked: it only keeps the canvas's own keys (Delete, arrows, Enter) off an
+// element, and a focused port or toast should still undo with Ctrl+Z.
+const OWNS_KEYS = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
 
 export interface ShortcutOptions {
   /**
    * Listen in the capture phase, before the focused element and React see the key, rather than
    * after them. A handler can then keep the key from an element that would act on it too, with
    * `event.stopPropagation()`: React Flow, for one, selects or deselects a focused node on Enter
-   * whatever the modifiers. Keys pressed where text is edited, in a dialog or in a menu are still
-   * left alone. Off by default.
+   * whatever the modifiers. Keys pressed where text is edited, in a dialog, a menu or a list of
+   * options are still left alone. Off by default.
+   *
+   * Such a binding pre-empts the focused element: its own handling of the key does not count, as
+   * it comes too late to mark the key handled (`defaultPrevented`), so give it only keys that no
+   * element on the page should keep.
    */
   readonly capture?: boolean;
 }
@@ -82,8 +86,8 @@ export function useShortcuts(
 
 /**
  * Whether keys pressed on `target` belong to it rather than to the page: it edits text (a text
- * input, a textarea, an editable element), or it is in a dialog or a menu. Clipboard shortcuts
- * pressed there keep the browser's behaviour too.
+ * input, a textarea, an editable element), or it is in a dialog, a menu or a list of options.
+ * Clipboard shortcuts pressed there keep the browser's behaviour too.
  */
 export function ownsKeys(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;

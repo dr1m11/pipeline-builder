@@ -15,13 +15,14 @@ const MISSING_QUESTION: ValidationIssue = {
 };
 
 describe('toFlowNode', () => {
-  it('wraps a domain node for React Flow and names it after its label', () => {
+  it('wraps a domain node for React Flow, named after its label and described by its card', () => {
     expect(toFlowNode(node)).toEqual({
       id: 'p-1',
       type: PIPELINE_NODE_TYPE,
       position: { x: 4, y: 8 },
       data: { node, issues: EMPTY_ISSUES },
       ariaLabel: 'Prompt 1',
+      domAttributes: { 'aria-describedby': 'node-description-p-1' },
       selected: false,
       dragging: false,
       measured: undefined,
@@ -42,7 +43,7 @@ describe('toFlowNode', () => {
     });
   });
 
-  it('carries the issues of a node and describes it by the list of them', () => {
+  it('carries the issues of a node', () => {
     expect(toFlowNode(node, { issues: [MISSING_QUESTION] })).toMatchObject({
       data: { node, issues: [MISSING_QUESTION] },
       domAttributes: { 'aria-describedby': 'node-description-p-1' },

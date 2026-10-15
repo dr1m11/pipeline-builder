@@ -10,13 +10,38 @@ import {
   validatePipeline,
 } from '@pipeline-builder/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { type Edge, type NodeTypes, type OnConnect, ReactFlow } from '@xyflow/react';
+import {
+  type Edge,
+  type NodeProps,
+  type NodeTypes,
+  type OnConnect,
+  ReactFlow,
+} from '@xyflow/react';
 import { expect, fn, within } from 'storybook/test';
 
 import { PIPELINE_NODE_TYPE, type PipelineFlowNode, toFlowNode } from '../model/flow-node';
+import type { NodeRunSlots } from './NodeCard';
 import { PipelineNodeView } from './PipelineNodeView';
 
 const NODE_TYPES = { [PIPELINE_NODE_TYPE]: PipelineNodeView } satisfies NodeTypes;
+
+/** Run UI with nothing to show, as before any run. */
+function NothingYet() {
+  return null;
+}
+
+const IDLE_RUN: NodeRunSlots = {
+  status: <NothingYet />,
+  preview: <NothingYet />,
+  description: <NothingYet />,
+};
+
+/** The node with run slots that show nothing, as the canvas composes it before a run. */
+function NodeWithIdleRun(props: NodeProps<PipelineFlowNode>) {
+  return <PipelineNodeView {...props} run={IDLE_RUN} />;
+}
+
+const IDLE_RUN_NODE_TYPES = { [PIPELINE_NODE_TYPE]: NodeWithIdleRun } satisfies NodeTypes;
 
 function node<K extends NodeKind>(
   kind: K,
@@ -223,5 +248,38 @@ export const RemovedPort: Story = {
     await expect(
       await canvas.findByRole('group', { name: 'Input 1 value to Prompt 1 question' }),
     ).toBeVisible();
+  },
+};
+
+/**
+ * Run slots that show nothing take no room: the card lays out as it does without them (on the
+ * left), so the summary keeps its width.
+ */
+export const IdleRunSlots: Story = {
+  render: () => (
+    <div className="flex gap-4">
+      {[
+        { label: 'Without run', nodeTypes: NODE_TYPES },
+        { label: 'With idle run', nodeTypes: IDLE_RUN_NODE_TYPES },
+      ].map(({ label, nodeTypes }) => (
+        <div key={label} className="h-60 w-80">
+          <ReactFlow
+            nodes={[flowNode(node('input', label, { data: { value: 'What is RAG?' } }))]}
+            nodeTypes={nodeTypes}
+            fitView
+          />
+        </div>
+      ))}
+    </div>
+  ),
+  play: async ({ canvas }) => {
+    const summaryWidth = async (name: string) => {
+      const card = await canvas.findByRole('group', { name });
+      return within(card).getByText('What is RAG?').getBoundingClientRect().width;
+    };
+    await expect(await summaryWidth('With idle run')).toBeCloseTo(
+      await summaryWidth('Without run'),
+      1,
+    );
   },
 };

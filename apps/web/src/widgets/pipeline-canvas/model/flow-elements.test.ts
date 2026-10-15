@@ -68,7 +68,7 @@ describe('toFlowNodes', () => {
     });
   });
 
-  it('gives each node its issues and describes the nodes that have any', () => {
+  it('gives each node its issues and its description', () => {
     const issue = valueIssue();
     const [inputNode, promptNode] = toFlowNodes(
       source({ issuesByNode: new Map([['input', [issue]]]) }),
@@ -77,7 +77,7 @@ describe('toFlowNodes', () => {
     expect(inputNode?.data.issues).toEqual([issue]);
     expect(inputNode?.domAttributes).toEqual({ 'aria-describedby': 'node-description-input' });
     expect(promptNode?.data.issues).toBe(EMPTY_ISSUES);
-    expect(promptNode?.domAttributes).toBeUndefined();
+    expect(promptNode?.domAttributes).toEqual({ 'aria-describedby': 'node-description-prompt' });
   });
 
   it('reuses the object of every node whose inputs have not changed', () => {

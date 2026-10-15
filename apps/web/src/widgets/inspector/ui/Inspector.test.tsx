@@ -1,10 +1,17 @@
-import { addNode, createEmptyPipeline, type NodeKind, type Pipeline } from '@pipeline-builder/core';
+import {
+  addNode,
+  createEmptyPipeline,
+  type NodeKind,
+  type Pipeline,
+  type RunEvent,
+} from '@pipeline-builder/core';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ReactFlowProvider } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';
 
 import { createPipelineStore, PipelineStoreProvider } from '@/entities/pipeline';
+import { createRunStore, RunStoreProvider } from '@/entities/run';
 
 import { Inspector } from './Inspector';
 
@@ -24,11 +31,14 @@ function twoNodes(): Pipeline {
 
 function renderInspector(pipeline = twoNodes()) {
   const store = createPipelineStore(pipeline);
+  const runStore = createRunStore();
   render(
     <PipelineStoreProvider store={store}>
-      <ReactFlowProvider>
-        <Inspector />
-      </ReactFlowProvider>
+      <RunStoreProvider store={runStore}>
+        <ReactFlowProvider>
+          <Inspector />
+        </ReactFlowProvider>
+      </RunStoreProvider>
     </PipelineStoreProvider>,
   );
   const select = (nodeIds: string[]) => {
@@ -36,7 +46,7 @@ function renderInspector(pipeline = twoNodes()) {
       store.getState().select({ nodeIds });
     });
   };
-  return { store, select, user: userEvent.setup() };
+  return { store, runStore, select, user: userEvent.setup() };
 }
 
 describe('Inspector', () => {
@@ -201,5 +211,93 @@ describe('Inspector problems', () => {
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
     expect(screen.getByRole('textbox', { name: 'Value' })).not.toHaveFocus();
+  });
+});
+
+describe('Inspector run output', () => {
+  const runOutput = () => screen.queryByRole('region', { name: 'Run output' });
+
+  function setUp() {
+    const rendered = renderInspector(pipelineOf(['llm', 'llm-call'], ['parse', 'transform']));
+    const report = (events: readonly RunEvent[]) => {
+      act(() => {
+        const { runStore } = rendered;
+        if (runStore.getState().status !== 'running') runStore.getState().start();
+        runStore.getState().applyEvents(events);
+      });
+    };
+    return { ...rendered, report };
+  }
+
+  it('is not shown before the run reaches the selected node', () => {
+    const { select, report } = setUp();
+    select(['llm']);
+    expect(runOutput()).not.toBeInTheDocument();
+
+    report([{ type: 'node-status', nodeId: 'parse', status: 'queued' }]);
+
+    expect(runOutput()).not.toBeInTheDocument();
+  });
+
+  it('follows the response of the selected node as it streams, then shows it whole', () => {
+    const { select, report } = setUp();
+    select(['llm']);
+
+    report([
+      { type: 'node-status', nodeId: 'llm', status: 'running' },
+      { type: 'node-delta', nodeId: 'llm', text: '{"name":' },
+    ]);
+    const section = runOutput();
+    if (section === null) throw new Error('The run output is not shown');
+    expect(within(section).getByText('Running')).toBeInTheDocument();
+    expect(within(section).getByRole('figure', { name: 'response (so far)' })).toHaveTextContent(
+      '{"name":',
+    );
+
+    report([
+      { type: 'node-delta', nodeId: 'llm', text: ' "Ada"}' },
+      { type: 'node-output', nodeId: 'llm', outputs: { response: '{"name": "Ada"}' } },
+      { type: 'node-status', nodeId: 'llm', status: 'done' },
+    ]);
+    expect(within(section).getByText('Done')).toBeInTheDocument();
+    expect(within(section).getByRole('figure', { name: 'response' })).toHaveTextContent(
+      '{"name": "Ada"}',
+    );
+  });
+
+  it('shows the output of another node when it is selected, as formatted JSON', () => {
+    const { select, report } = setUp();
+    report([
+      { type: 'node-output', nodeId: 'parse', outputs: { result: { name: 'Ada' } } },
+      { type: 'node-status', nodeId: 'parse', status: 'done' },
+    ]);
+
+    select(['parse']);
+
+    expect(screen.getByRole('figure', { name: 'result' })).toHaveTextContent(
+      'result{\n  "name": "Ada"\n}',
+      { normalizeWhitespace: false },
+    );
+    select(['llm', 'parse']);
+    expect(runOutput()).not.toBeInTheDocument();
+  });
+
+  it('says why the selected node failed', () => {
+    const { select, report } = setUp();
+    select(['parse']);
+
+    report([
+      {
+        type: 'node-status',
+        nodeId: 'parse',
+        status: 'error',
+        error: { code: 'invalid-json', message: 'Input "value" is not valid JSON' },
+      },
+    ]);
+
+    const section = runOutput();
+    if (section === null) throw new Error('The run output is not shown');
+    expect(within(section).getByText('Failed')).toBeInTheDocument();
+    expect(within(section).getByText('Input "value" is not valid JSON')).toBeInTheDocument();
   });
 });

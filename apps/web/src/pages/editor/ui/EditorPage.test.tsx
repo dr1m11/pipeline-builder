@@ -753,6 +753,61 @@ describe('EditorPage runs', () => {
     expect(runButton()).not.toHaveAttribute('aria-disabled');
   });
 
+  it('runs again with Ctrl+Enter from the text a node shows', async () => {
+    const fetchMock = stubProxy();
+    openAskPipeline('mock');
+    const { user } = renderPage();
+    await user.click(runButton());
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Run finished: 4 nodes done');
+    });
+    const answer = screen.getByRole('group', { name: 'Answer' });
+    act(() => {
+      within(answer).getByRole('textbox', { name: 'Answer result' }).focus();
+    });
+
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('shows the run on the nodes and the selected node’s output in the inspector', async () => {
+    const fetchMock = stubProxy();
+    const { user } = renderPage();
+    await user.click(screen.getByRole('button', { name: 'Ask a question' }));
+
+    await user.click(runButton());
+
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Run finished: 4 nodes done');
+    });
+    const body = fetchMock.mock.calls[0]?.[1]?.body;
+    const answer = mockCompletion(
+      LLM_REQUEST_SCHEMA.parse(JSON.parse(typeof body === 'string' ? body : '')),
+    );
+    const model = screen.getByRole('group', { name: 'Model' });
+    expect(model).toHaveAccessibleDescription(/Run status: done\./);
+    const answerNode = screen.getByRole('group', { name: 'Answer' });
+    // As written: line breaks and list markers kept.
+    expect(within(answerNode).getByRole('textbox', { name: 'Answer result' })).toHaveTextContent(
+      answer,
+      { normalizeWhitespace: false },
+    );
+
+    act(() => {
+      model.focus();
+    });
+    await user.keyboard('{Enter}');
+
+    const runOutput = screen.getByRole('region', { name: 'Run output' });
+    expect(within(runOutput).getByText('Done')).toBeInTheDocument();
+    expect(within(runOutput).getByRole('figure', { name: 'response' })).toHaveTextContent(answer, {
+      normalizeWhitespace: false,
+    });
+  });
+
   it('keeps Run unavailable while the pipeline has errors', async () => {
     const { user } = renderPage();
     expect(runButton()).toHaveAccessibleDescription('Add a node to run');

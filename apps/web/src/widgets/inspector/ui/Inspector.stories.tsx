@@ -1,20 +1,26 @@
-import { addNode, createEmptyPipeline, type NodeKind } from '@pipeline-builder/core';
+import { addNode, createEmptyPipeline, type NodeKind, type RunEvent } from '@pipeline-builder/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useMemo } from 'react';
-import { expect, waitFor } from 'storybook/test';
+import { expect, waitFor, within } from 'storybook/test';
 
 import { createPipelineStore, PipelineStoreProvider } from '@/entities/pipeline';
+import { createRunStore, RunStoreProvider } from '@/entities/run';
 
 import { Inspector } from './Inspector';
 
-/** The inspector over unconnected nodes `nodes` (id and kind), with `selected` selected. */
+/**
+ * The inspector over unconnected nodes `nodes` (id and kind), with `selected` selected, and a run
+ * that has reported `run`, if any.
+ */
 function InspectorPreview({
   nodes,
   selected,
+  run = [],
 }: {
   nodes: [string, NodeKind][];
   selected: string[];
+  run?: readonly RunEvent[];
 }) {
   const store = useMemo(() => {
     let pipeline = createEmptyPipeline({ id: 'draft', name: 'Story' });
@@ -25,13 +31,23 @@ function InspectorPreview({
     created.getState().select({ nodeIds: selected });
     return created;
   }, [nodes, selected]);
+  const runStore = useMemo(() => {
+    const created = createRunStore();
+    if (run.length > 0) {
+      created.getState().start();
+      created.getState().applyEvents(run);
+    }
+    return created;
+  }, [run]);
   return (
     <PipelineStoreProvider store={store}>
-      <ReactFlowProvider>
-        <aside aria-label="Inspector" className="w-80 border border-border bg-surface">
-          <Inspector />
-        </aside>
-      </ReactFlowProvider>
+      <RunStoreProvider store={runStore}>
+        <ReactFlowProvider>
+          <aside aria-label="Inspector" className="w-80 border border-border bg-surface">
+            <Inspector />
+          </aside>
+        </ReactFlowProvider>
+      </RunStoreProvider>
     </PipelineStoreProvider>
   );
 }
@@ -125,5 +141,55 @@ export const NoProblems: Story = {
   play: async ({ canvas }) => {
     await expect(canvas.getByRole('button', { name: 'Problems: none' })).toBeVisible();
     await expect(canvas.getByText('No problems')).toBeVisible();
+  },
+};
+
+/** The full answer of the selected LLM Call, below its properties. */
+export const RunOutput: Story = {
+  args: {
+    selected: ['llm'],
+    run: [
+      { type: 'node-status', nodeId: 'llm', status: 'running' },
+      {
+        type: 'node-delta',
+        nodeId: 'llm',
+        text: 'The sky looks blue because air scatters sunlight.',
+      },
+      {
+        type: 'node-output',
+        nodeId: 'llm',
+        outputs: { response: 'The sky looks blue because air scatters sunlight.' },
+      },
+      { type: 'node-status', nodeId: 'llm', status: 'done' },
+    ],
+  },
+  play: async ({ canvas }) => {
+    const section = canvas.getByRole('region', { name: 'Run output' });
+    await expect(within(section).getByText('Done')).toBeVisible();
+    await expect(within(section).getByRole('figure', { name: 'response' })).toHaveTextContent(
+      'The sky looks blue because air scatters sunlight.',
+    );
+  },
+};
+
+/** Why the selected node failed. */
+export const RunError: Story = {
+  args: {
+    nodes: [['parse', 'transform']],
+    selected: ['parse'],
+    run: [
+      { type: 'node-status', nodeId: 'parse', status: 'running' },
+      {
+        type: 'node-status',
+        nodeId: 'parse',
+        status: 'error',
+        error: { code: 'invalid-json', message: 'Input "value" is not valid JSON' },
+      },
+    ],
+  },
+  play: async ({ canvas }) => {
+    const section = canvas.getByRole('region', { name: 'Run output' });
+    await expect(within(section).getByText('Failed')).toBeVisible();
+    await expect(within(section).getByText('Input "value" is not valid JSON')).toBeVisible();
   },
 };
