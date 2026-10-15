@@ -753,6 +753,26 @@ describe('EditorPage runs', () => {
     expect(runButton()).not.toHaveAttribute('aria-disabled');
   });
 
+  it('runs again with Ctrl+Enter from the text a node shows', async () => {
+    const fetchMock = stubProxy();
+    openAskPipeline('mock');
+    const { user } = renderPage();
+    await user.click(runButton());
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Run finished: 4 nodes done');
+    });
+    const answer = screen.getByRole('group', { name: 'Answer' });
+    act(() => {
+      within(answer).getByRole('textbox', { name: 'Answer result' }).focus();
+    });
+
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('shows the run on the nodes and the selected node’s output in the inspector', async () => {
     const fetchMock = stubProxy();
     const { user } = renderPage();
