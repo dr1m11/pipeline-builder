@@ -18,12 +18,14 @@ The core `Pipeline` is the single source of truth. It lives in a zustand store i
 5. **Never edit React Flow's copy.** `useReactFlow().setNodes`, `addNodes`, `updateNode*` and their edge counterparts produce `add`/`replace` changes, which the adapters ignore, so the edit would be lost. Elements are added and edited through the store.
 6. **Core keeps identities.** Operations keep unchanged nodes and edges identical and return the same pipeline when nothing changes. The cache (rule 2) and the store, which notifies nobody when an action changes nothing, rely on this; core tests cover it.
 7. **One store per editor.** `createPipelineStore(pipeline)` builds a store and `PipelineStoreProvider` provides it; the app generates ids and passes them to core.
+8. **A run stays beside the canvas, never in it** (added in A5, [#84](https://github.com/dr1m11/pipeline-builder/issues/84) and [#85](https://github.com/dr1m11/pipeline-builder/issues/85)). The run of a pipeline is view state in a store of its own per editor (`entities/run`): never saved, never in the history, cleared when the next run starts or the document is replaced. The run feature applies the engine's events ([ADR 0011](./0011-pipeline-execution-engine.md)) to it at most once per animation frame, and a run's end at once. React Flow node and edge objects carry no run state, so the cache of rule 2 is untouched by a run. The canvas widget composes the run's components into each node card through `NodeRunSlots` (status, result, a line of description, dimmed), since entities do not import each other; the components read the run store by node id, so a streamed token re-renders the text of its own node only. React Flow's `default` edge type is replaced by `CanvasEdge`: the same bezier path, with a class for the data the run carried along the edge, read by the edge's ends.
 
 ## Consequences
 
 - Every later stage reads and changes one document; undo (A4) can keep pipeline snapshots, and selection, sizes and drag positions stay out of history and saved files.
 - The store and the change adapters are tested without a browser; canvas gestures are tested in Storybook (real browser) and Playwright.
 - Each new kind of React Flow interaction needs an adapter. Features that change React Flow's own nodes (resizing with `NodeResizer`, sub-flows) need explicit support.
+- A run costs the canvas one re-render per token, of one component, whatever the size of the pipeline (tested with 50 nodes). Run UI on a node is added through `NodeRunSlots`, and edge styles through `CanvasEdge`, rather than through the derived objects.
 - To watch: derivation cost with hundreds of nodes (A6, where `onlyRenderVisibleElements` uses `dragging`); handle positions when a node's ports change need `useUpdateNodeInternals` (A3).
 
 ## Alternatives considered
