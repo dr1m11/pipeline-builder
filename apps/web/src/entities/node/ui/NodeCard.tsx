@@ -77,8 +77,10 @@ export function NodeCard({
         // Dimmed without fading the text, which must keep its contrast: a flat card, dashed.
         run.dimmed === true && 'border-dashed bg-surface-muted shadow-none',
         selected && 'border-accent ring-1 ring-accent',
-        // A ring apart from the card, so that it stays clear of the selection's and the problems'.
-        run.highlighted === true && 'ring-2 ring-accent ring-offset-4 ring-offset-canvas',
+        // A frame of its own around the card, beyond the focus outline: the selection's ring, the
+        // problems' border and the focus outline all stay visible beside it.
+        run.highlighted === true &&
+          'relative before:pointer-events-none before:absolute before:-inset-2 before:rounded-2xl before:border-2 before:border-accent',
         problems.severity === 'error' && 'border-danger',
         problems.severity === 'warning' && 'border-warning',
       )}

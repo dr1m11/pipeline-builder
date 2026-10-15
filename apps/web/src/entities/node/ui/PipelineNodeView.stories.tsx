@@ -19,6 +19,8 @@ import {
 } from '@xyflow/react';
 import { expect, fn, within } from 'storybook/test';
 
+import { Badge } from '@/shared/ui/badge';
+
 import { PIPELINE_NODE_TYPE, type PipelineFlowNode, toFlowNode } from '../model/flow-node';
 import type { NodeRunSlots } from './NodeCard';
 import { PipelineNodeView } from './PipelineNodeView';
@@ -42,6 +44,19 @@ function NodeWithIdleRun(props: NodeProps<PipelineFlowNode>) {
 }
 
 const IDLE_RUN_NODE_TYPES = { [PIPELINE_NODE_TYPE]: NodeWithIdleRun } satisfies NodeTypes;
+
+/** Run slots of the node a step-by-step run is paused before. */
+const NEXT_RUN: NodeRunSlots = {
+  status: <Badge tone="info">Next</Badge>,
+  highlighted: true,
+};
+
+/** The node as the canvas shows it while a step-by-step run is paused before it. */
+function NextNode(props: NodeProps<PipelineFlowNode>) {
+  return <PipelineNodeView {...props} run={NEXT_RUN} />;
+}
+
+const NEXT_NODE_TYPES = { [PIPELINE_NODE_TYPE]: NextNode } satisfies NodeTypes;
 
 function node<K extends NodeKind>(
   kind: K,
@@ -281,5 +296,53 @@ export const IdleRunSlots: Story = {
       await summaryWidth('Without run'),
       1,
     );
+  },
+};
+
+/** The card inside React Flow's wrapper of a node, which has the node's role and name. */
+function cardOf(node: HTMLElement): Element {
+  const card = node.firstElementChild;
+  if (card === null) throw new Error('The node has no card');
+  return card;
+}
+
+/**
+ * The node a step-by-step run is paused before gets a frame of its own, so a selected one keeps
+ * the selection's ring and border inside that frame.
+ */
+export const SelectedAndNext: Story = {
+  render: () => (
+    <div className="flex gap-4">
+      {[
+        { nodeTypes: NODE_TYPES, nodes: [flowNode(node('input', 'Selected'), true)] },
+        {
+          nodeTypes: NEXT_NODE_TYPES,
+          nodes: [
+            flowNode(node('input', 'Selected and next'), true),
+            flowNode(node('input', 'Next', { x: 320 })),
+          ],
+        },
+      ].map(({ nodeTypes, nodes }) => (
+        <div key={nodes[0]?.id} className="h-60 w-[36rem]">
+          <ReactFlow nodes={nodes} nodeTypes={nodeTypes} fitView />
+        </div>
+      ))}
+    </div>
+  ),
+  play: async ({ canvas }) => {
+    const selected = cardOf(await canvas.findByRole('group', { name: 'Selected' }));
+    const both = cardOf(await canvas.findByRole('group', { name: 'Selected and next' }));
+    const next = cardOf(await canvas.findByRole('group', { name: 'Next' }));
+    const frame = (card: Element) => getComputedStyle(card, '::before').borderTopWidth;
+
+    // The selection's ring (a box shadow) and border are the same with the frame as without.
+    await expect(getComputedStyle(both).boxShadow).toBe(getComputedStyle(selected).boxShadow);
+    await expect(getComputedStyle(both).borderTopColor).toBe(
+      getComputedStyle(selected).borderTopColor,
+    );
+    await expect(getComputedStyle(next).boxShadow).not.toBe(getComputedStyle(both).boxShadow);
+    await expect(frame(both)).toBe('2px');
+    await expect(frame(next)).toBe('2px');
+    await expect(frame(selected)).toBe('0px');
   },
 };
