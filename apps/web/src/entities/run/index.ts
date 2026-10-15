@@ -1,4 +1,4 @@
-export { type EdgeEnds, type EdgeFlow } from './model/edge-flow';
+export { type EdgeFlow } from './model/edge-flow';
 export { type NodeRunState, type RunState, type RunStatus } from './model/run-state';
 export { createRunStore, type RunActions, type RunStore } from './model/run-store';
 export { RunStoreProvider, type RunStoreProviderProps } from './model/RunStoreProvider';
@@ -11,5 +11,5 @@ export {
 } from './model/store-context';
 export { NodeRunDescription } from './ui/NodeRunDescription';
 export { NodeRunDetails } from './ui/NodeRunDetails';
-export { NodeRunPreview, type NodeRunPreviewProps } from './ui/NodeRunPreview';
-export { NodeRunBadge, type NodeRunBadgeProps } from './ui/RunStatusBadge';
+export { NodeRunPreview } from './ui/NodeRunPreview';
+export { NodeRunBadge } from './ui/RunStatusBadge';
