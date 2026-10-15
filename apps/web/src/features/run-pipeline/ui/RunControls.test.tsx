@@ -276,6 +276,22 @@ describe('RunControls in step mode', () => {
     expect(continueButton()).toHaveFocus();
   });
 
+  it('says that the run goes on without pausing on Continue', async () => {
+    const { runStore, user } = renderControls();
+    await user.click(stepModeButton());
+    await user.click(runButton());
+    await announced('Paused before Question');
+
+    await user.click(continueButton());
+
+    await announced('Running without pausing');
+    expect(runStore.getState().stepping).toBe(false);
+    for (const button of [nextStepButton(), continueButton()]) {
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).toHaveAccessibleDescription('The run goes on without pausing');
+    }
+  });
+
   it('stops a paused run', async () => {
     const { runStore, stream, user } = renderControls();
     await user.click(stepModeButton());

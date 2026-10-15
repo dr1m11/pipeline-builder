@@ -38,8 +38,8 @@ const UNAVAILABLE = 'aria-disabled:cursor-not-allowed aria-disabled:opacity-50';
  * Run and Stop for the surrounding pipeline, with Ctrl/⌘+Enter and Ctrl/⌘+. (see `RUN_SHORTCUTS`).
  * Run is unavailable while the pipeline has validation errors or no nodes, and says why ("Fix 2
  * errors to run") in its tooltip and its accessible description; Stop is available while a run is
- * in progress. A polite live region announces when a run starts, pauses and ends, never single
- * tokens.
+ * in progress. A polite live region announces when a run starts, pauses, goes on without pausing
+ * and ends, never single tokens.
  *
  * The Step mode toggle makes runs pause before each node. While it is on, Next step (F10) lets
  * the node the run is paused before run, and Continue lets the run go on without pausing.

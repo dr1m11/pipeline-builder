@@ -54,7 +54,10 @@ export interface PipelineRunner {
   readonly setStepMode: (stepMode: boolean) => void;
   /** Lets the node the run is paused before run; the run pauses again before the next one. */
   readonly nextStep: () => void;
-  /** Lets the run in progress go on to its end without pausing; step mode stays on for the next run. */
+  /**
+   * Lets the run in progress go on to its end without pausing, and says so; step mode stays on for
+   * the next run. Does nothing when no run is going step by step.
+   */
   readonly continueRun: () => void;
   /**
    * The latest message for screen readers: a run started, paused before a node or ended, or why it
@@ -67,7 +70,8 @@ export interface PipelineRunner {
  * Runs the pipeline of the surrounding pipeline store and shows the run in the surrounding run
  * store. A run works on a snapshot of the pipeline, so the user may go on editing while it runs.
  * In step mode it pauses before each node; the run store shows where (`pausedNodeId`), and the
- * announcement says "Paused before Model" instead of "Run started".
+ * announcement says "Paused before Model" instead of "Run started", then "Running without pausing"
+ * on Continue.
  *
  * A run is cancelled when the document is replaced (an import, a template, a new pipeline, or an
  * undo or a redo of one), and the run store is cleared, since its nodes are gone; the same happens,
@@ -152,7 +156,10 @@ export function usePipelineRunner({ llm, onMissingApiKey }: PipelineRunnerOption
   };
 
   const continueRun = () => {
+    const { status, stepping } = runStore.getState();
+    if (status !== 'running' || !stepping) return;
     sessionRef.current?.setStepping(false);
+    announce('Running without pausing');
   };
 
   return {

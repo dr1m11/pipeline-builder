@@ -571,13 +571,14 @@ describe('usePipelineRunner in step mode', () => {
   });
 
   it('runs the rest without pausing on Continue, and steps again in the next run', async () => {
-    const { result, runStore, streams, run, nodeRun, setStepMode, continueRun, paused } =
+    const { result, runStore, streams, run, announced, nodeRun, setStepMode, continueRun, paused } =
       setUpSteps();
     await setStepMode(true);
     await run();
 
     await continueRun();
 
+    expect(announced()).toBe('Running without pausing');
     expect(paused()).toBeNull();
     expect(runStore.getState().stepping).toBe(false);
     expect(streams).toHaveLength(1);
@@ -653,12 +654,14 @@ describe('usePipelineRunner in step mode', () => {
     expect(runStore.getState().status).toBe('done');
   });
 
-  it('runs without pausing while step mode is off', async () => {
-    const { runStore, streams, run, nextStep, paused } = setUpSteps();
+  it('runs without pausing while step mode is off, where Next step and Continue do nothing', async () => {
+    const { runStore, streams, run, announced, nextStep, continueRun, paused } = setUpSteps();
 
     await run();
     await nextStep();
+    await continueRun();
 
+    expect(announced()).toBe('Run started');
     expect(runStore.getState().stepping).toBe(false);
     expect(paused()).toBeNull();
     expect(streams).toHaveLength(1);
