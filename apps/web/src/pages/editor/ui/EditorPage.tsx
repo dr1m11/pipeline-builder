@@ -4,11 +4,13 @@ import { CodeXml } from 'lucide-react';
 import { useState } from 'react';
 
 import { PipelineStoreProvider, usePipelineStore } from '@/entities/pipeline';
+import { createRunStore, RunStoreProvider } from '@/entities/run';
 import { NodePalette, useNodeDrop } from '@/features/add-node';
 import { useEditSelection } from '@/features/edit-selection';
 import { ExportButton, ImportButton } from '@/features/import-export';
 import { NewPipelineMenu, TemplateButtons } from '@/features/load-template';
 import { ApiKeysButton, ApiKeysDialog } from '@/features/manage-api-keys';
+import { RunControls } from '@/features/run-pipeline';
 import { ShortcutsHelp, useShowShortcutsShortcut } from '@/features/show-shortcuts';
 import { ThemeToggle } from '@/features/toggle-theme';
 import { UndoRedoButtons, useUndoRedoShortcuts } from '@/features/undo-redo';
@@ -28,75 +30,87 @@ interface ApiKeysDialogState {
 
 export function EditorPage() {
   const store = useAutosavedStore();
+  // The run of the pipeline: view state beside the document, never saved (see entities/run).
+  const [runStore] = useState(createRunStore);
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
   // Owned here, not by the header button: a run that needs a key opens the dialog at its provider.
   const [apiKeysDialog, setApiKeysDialog] = useState<ApiKeysDialogState>({ open: false });
 
+  const askForApiKey = (provider: LlmProvider) => {
+    setApiKeysDialog({ open: true, provider });
+  };
+
   return (
     <PipelineStoreProvider store={store}>
-      {/* Wraps the page, not just the canvas: the palette adds nodes where the canvas is looking. */}
-      <ReactFlowProvider>
-        <EditorShortcuts
-          onShowShortcuts={() => {
-            setShortcutsHelpOpen(true);
-          }}
-        />
-        <div className="grid h-full grid-rows-[auto_1fr]">
-          <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2">
-            <PipelineName />
-            <div className="flex items-center gap-2">
-              <div role="toolbar" aria-label="File" className="flex items-center gap-1">
-                <NewPipelineMenu />
-                <ImportButton />
-                <ExportButton />
+      <RunStoreProvider store={runStore}>
+        {/* Wraps the page, not just the canvas: the palette adds nodes where the canvas is looking. */}
+        <ReactFlowProvider>
+          <EditorShortcuts
+            onShowShortcuts={() => {
+              setShortcutsHelpOpen(true);
+            }}
+          />
+          <div className="grid h-full grid-rows-[auto_1fr]">
+            <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2">
+              <PipelineName />
+              <div className="flex items-center gap-2">
+                <div role="toolbar" aria-label="File" className="flex items-center gap-1">
+                  <NewPipelineMenu />
+                  <ImportButton />
+                  <ExportButton />
+                </div>
+                <span aria-hidden className="h-5 w-px bg-border" />
+                <div role="toolbar" aria-label="Edit" className="flex items-center gap-1">
+                  <UndoRedoButtons />
+                </div>
+                <span aria-hidden className="h-5 w-px bg-border" />
+                <div role="toolbar" aria-label="Run" className="flex items-center gap-1">
+                  <RunControls onMissingApiKey={askForApiKey} />
+                </div>
+                <span aria-hidden className="h-5 w-px bg-border" />
+                <ApiKeysButton
+                  onClick={() => {
+                    setApiKeysDialog({ open: true });
+                  }}
+                />
+                <ApiKeysDialog
+                  open={apiKeysDialog.open}
+                  provider={apiKeysDialog.provider}
+                  onOpenChange={(open) => {
+                    setApiKeysDialog((current) => ({ ...current, open }));
+                  }}
+                />
+                <ShortcutsHelp
+                  shortcuts={EDITOR_SHORTCUTS}
+                  open={shortcutsHelpOpen}
+                  onOpenChange={setShortcutsHelpOpen}
+                />
+                <ThemeToggle />
+                <IconButton label="Source code on GitHub" asChild>
+                  <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">
+                    <CodeXml aria-hidden />
+                  </a>
+                </IconButton>
               </div>
-              <span aria-hidden className="h-5 w-px bg-border" />
-              <div role="toolbar" aria-label="Edit" className="flex items-center gap-1">
-                <UndoRedoButtons />
-              </div>
-              <span aria-hidden className="h-5 w-px bg-border" />
-              <ApiKeysButton
-                onClick={() => {
-                  setApiKeysDialog({ open: true });
-                }}
-              />
-              <ApiKeysDialog
-                open={apiKeysDialog.open}
-                provider={apiKeysDialog.provider}
-                onOpenChange={(open) => {
-                  setApiKeysDialog((current) => ({ ...current, open }));
-                }}
-              />
-              <ShortcutsHelp
-                shortcuts={EDITOR_SHORTCUTS}
-                open={shortcutsHelpOpen}
-                onOpenChange={setShortcutsHelpOpen}
-              />
-              <ThemeToggle />
-              <IconButton label="Source code on GitHub" asChild>
-                <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">
-                  <CodeXml aria-hidden />
-                </a>
-              </IconButton>
+            </header>
+            <div className="grid min-h-0 grid-cols-[16rem_1fr_20rem]">
+              <aside
+                aria-label="Node palette"
+                className="overflow-y-auto border-r border-border bg-surface"
+              >
+                <NodePalette />
+              </aside>
+              <CanvasArea />
+              <aside
+                aria-label="Inspector"
+                className="overflow-y-auto border-l border-border bg-surface"
+              >
+                <Inspector />
+              </aside>
             </div>
-          </header>
-          <div className="grid min-h-0 grid-cols-[16rem_1fr_20rem]">
-            <aside
-              aria-label="Node palette"
-              className="overflow-y-auto border-r border-border bg-surface"
-            >
-              <NodePalette />
-            </aside>
-            <CanvasArea />
-            <aside
-              aria-label="Inspector"
-              className="overflow-y-auto border-l border-border bg-surface"
-            >
-              <Inspector />
-            </aside>
           </div>
-        </div>
-      </ReactFlowProvider>
+        </ReactFlowProvider>
+      </RunStoreProvider>
     </PipelineStoreProvider>
   );
 }

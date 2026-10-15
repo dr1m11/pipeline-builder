@@ -182,6 +182,85 @@ describe('useShortcuts', () => {
   });
 });
 
+describe('useShortcuts in the capture phase', () => {
+  const run = vi.fn();
+  const nodeKeyDown = vi.fn();
+  const nodeClick = vi.fn();
+
+  /** A shortcut that keeps Ctrl/⌘+Enter from the page, and a control that acts on Enter itself. */
+  function Canvas({ capture }: { capture: boolean }) {
+    useShortcuts(
+      [
+        {
+          keys: ['Mod+Enter'],
+          handler: (event) => {
+            event.stopPropagation();
+            run();
+          },
+        },
+      ],
+      { capture },
+    );
+    return (
+      <>
+        <button type="button" onKeyDown={nodeKeyDown} onClick={nodeClick}>
+          Node
+        </button>
+        <input aria-label="Name" />
+      </>
+    );
+  }
+
+  beforeEach(() => {
+    run.mockClear();
+    nodeKeyDown.mockClear();
+    nodeClick.mockClear();
+  });
+
+  it('runs before the focused element, which then never sees the key', async () => {
+    const user = userEvent.setup();
+    render(<Canvas capture />);
+
+    screen.getByRole('button', { name: 'Node' }).focus();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    expect(run).toHaveBeenCalledOnce();
+    expect(nodeKeyDown).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'Enter' }));
+    expect(nodeClick).not.toHaveBeenCalled();
+  });
+
+  it('runs after the focused element otherwise', async () => {
+    const user = userEvent.setup();
+    render(<Canvas capture={false} />);
+
+    screen.getByRole('button', { name: 'Node' }).focus();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    expect(run).toHaveBeenCalledOnce();
+    expect(nodeKeyDown).toHaveBeenCalledWith(expect.objectContaining({ key: 'Enter' }));
+  });
+
+  it('still leaves keys pressed in a text field alone', async () => {
+    const user = userEvent.setup();
+    render(<Canvas capture />);
+
+    screen.getByRole('textbox', { name: 'Name' }).focus();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('stops listening once unmounted', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<Canvas capture />);
+
+    unmount();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    expect(run).not.toHaveBeenCalled();
+  });
+});
+
 describe('ownsKeys', () => {
   it('tells elements that keep their keys from the rest of the page', () => {
     render(<Editor />);

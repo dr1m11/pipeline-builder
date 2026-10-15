@@ -145,6 +145,8 @@ export function PortHandle({ port, direction, problem }: PortHandleProps) {
 
 function activateOnEnterOrSpace(event: KeyboardEvent<HTMLDivElement>) {
   if (event.key !== 'Enter' && event.key !== ' ') return;
+  // With a modifier the key is a shortcut of the page, such as Ctrl/⌘+Enter to run.
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
   event.preventDefault();
   // React Flow's click-to-connect: the first activation starts a connection, the second ends it.
   event.currentTarget.click();

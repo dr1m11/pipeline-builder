@@ -6,4 +6,9 @@ export {
   type ShortcutEvent,
   shortcutKeys,
 } from './shortcut';
-export { ownsKeys, type ShortcutBinding, useShortcuts } from './use-shortcuts';
+export {
+  ownsKeys,
+  type ShortcutBinding,
+  type ShortcutOptions,
+  useShortcuts,
+} from './use-shortcuts';

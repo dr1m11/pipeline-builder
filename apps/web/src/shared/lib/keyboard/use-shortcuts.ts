@@ -32,6 +32,17 @@ const EDITABLE = '[contenteditable]:not([contenteditable="false"])';
 // still undo with Ctrl+Z.
 const OWNS_KEYS = '[role="dialog"], [role="alertdialog"], [role="menu"]';
 
+export interface ShortcutOptions {
+  /**
+   * Listen in the capture phase, before the focused element and React see the key, rather than
+   * after them. A handler can then keep the key from an element that would act on it too, with
+   * `event.stopPropagation()`: React Flow, for one, selects or deselects a focused node on Enter
+   * whatever the modifiers. Keys pressed where text is edited, in a dialog or in a menu are still
+   * left alone. Off by default.
+   */
+  readonly capture?: boolean;
+}
+
 /**
  * Listens for shortcuts on the whole page while the component is mounted. A pressed shortcut runs
  * the handler of the first binding that has it, and its default action is prevented. Keys pressed
@@ -39,7 +50,10 @@ const OWNS_KEYS = '[role="dialog"], [role="alertdialog"], [role="menu"]';
  * are left alone, and so are keys that something else has already handled (`defaultPrevented`).
  * The bindings may change on every render.
  */
-export function useShortcuts(bindings: readonly ShortcutBinding[]): void {
+export function useShortcuts(
+  bindings: readonly ShortcutBinding[],
+  { capture = false }: ShortcutOptions = {},
+): void {
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || ownsKeys(event.target)) return;
     const apple = isApplePlatform();
@@ -59,11 +73,11 @@ export function useShortcuts(bindings: readonly ShortcutBinding[]): void {
     const listener = (event: KeyboardEvent) => {
       onKeyDown(event);
     };
-    document.addEventListener('keydown', listener);
+    document.addEventListener('keydown', listener, { capture });
     return () => {
-      document.removeEventListener('keydown', listener);
+      document.removeEventListener('keydown', listener, { capture });
     };
-  }, []);
+  }, [capture]);
 }
 
 /**
