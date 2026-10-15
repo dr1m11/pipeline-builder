@@ -134,6 +134,27 @@ describe('PipelineCanvas', () => {
     ]);
   });
 
+  it('leaves Enter with a modifier on a port to the page, such as Ctrl+Enter to run', async () => {
+    const { store, user } = renderCanvas(row('transform', 'output'));
+    const keyDowns: KeyboardEvent[] = [];
+    const listener = (event: KeyboardEvent) => keyDowns.push(event);
+    document.addEventListener('keydown', listener);
+    const transform = await screen.findByRole('group', { name: 'Transform 1' });
+    act(() => {
+      within(transform).getByRole('button', { name: 'Output result (json)' }).focus();
+    });
+
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await activatePort(user, 'Output 1', 'Input value (any)');
+
+    document.removeEventListener('keydown', listener);
+    // The port did not start a connection, which the Enter on the input would have completed.
+    expect(store.getState().pipeline.edges).toEqual([]);
+    expect(keyDowns.find((event) => event.ctrlKey && event.key === 'Enter')?.defaultPrevented).toBe(
+      false,
+    );
+  });
+
   it('refuses to connect ports of incompatible types', async () => {
     const { store, user } = renderCanvas(row('transform', 'llm-call'));
 
