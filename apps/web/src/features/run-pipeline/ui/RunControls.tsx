@@ -1,8 +1,8 @@
-import type { LlmClient, LlmProvider } from '@pipeline-builder/core';
+import { type LlmClient, type LlmProvider, validatePipeline } from '@pipeline-builder/core';
 import { LoaderCircle, Play, Square } from 'lucide-react';
 import { Fragment, useId, useRef, useState } from 'react';
 
-import { usePipelineStore, useValidationReport } from '@/entities/pipeline';
+import { usePipelineStore } from '@/entities/pipeline';
 import { useRunStore } from '@/entities/run';
 import {
   formatShortcut,
@@ -60,8 +60,10 @@ export function RunControls({ onMissingApiKey, llm }: RunControlsProps) {
   const reasonId = useId();
   const running = useRunStore((state) => state.status === 'running');
   const nodeCount = usePipelineStore((state) => state.pipeline.nodes.length);
-  const report = useValidationReport();
-  const blocker = running ? 'The pipeline is running' : runBlocker(nodeCount, report);
+  // The count alone, so that an edit re-renders Run only when the count changes. Core caches the
+  // report per pipeline, so the canvas and the inspector share it (see docs/adr/0008).
+  const errorCount = usePipelineStore((state) => validatePipeline(state.pipeline).errorCount);
+  const blocker = running ? 'The pipeline is running' : runBlocker(nodeCount, { errorCount });
 
   return (
     <>
