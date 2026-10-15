@@ -39,8 +39,9 @@ interface ResponsesRequest {
  * the user's key as a bearer token. The prompt is the `input` and the system prompt, unless blank,
  * the `instructions`; `maxTokens` is the `max_output_tokens` (at least 16, the API's minimum). It
  * asks reasoning models such as GPT-6 Luna for low reasoning effort, so reasoning leaves most of
- * the tokens to the answer, and sends no `temperature`, which they reject unless reasoning is off.
- * `store: false` keeps OpenAI from storing the response for later retrieval.
+ * the tokens to the answer, and sends no `temperature`, which OpenAI's guide for GPT-6 models says
+ * to remove unless reasoning effort is `none`. `store: false` keeps OpenAI from storing the
+ * response for later retrieval.
  *
  * The text of `response.output_text.delta` events is the answer and `response.completed` ends it.
  * `response.incomplete` ends it too, unless the content filter stopped it or the token limit came

@@ -82,7 +82,7 @@ describe('createOpenAiProvider', () => {
       expect(sentBody).toHaveProperty('max_output_tokens', sent);
     });
 
-    it('sends no temperature, which reasoning models reject', async () => {
+    it('sends no temperature, which OpenAI says to leave out at low effort', async () => {
       const { sentBody } = await run(OPENAI_ANSWER, { ...REQUEST, temperature: 0 });
 
       expect(sentBody).not.toHaveProperty('temperature');
