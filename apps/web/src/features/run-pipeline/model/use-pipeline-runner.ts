@@ -1,5 +1,5 @@
 import { type LlmClient, type LlmProvider, validatePipeline } from '@pipeline-builder/core';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getApiKey } from '@/entities/api-key';
 import { usePipelineStoreApi } from '@/entities/pipeline';
@@ -46,9 +46,9 @@ export interface PipelineRunner {
  * store. A run works on a snapshot of the pipeline, so the user may go on editing while it runs.
  *
  * A run is cancelled when the document is replaced (an import, a template, a new pipeline, or an
- * undo or a redo of one), and the run store is cleared, since its nodes are gone; the same happens
- * when the component unmounts. A run that fails shows a toast with the node that failed first.
- * Needs `ToastProvider` above it.
+ * undo or a redo of one), and the run store is cleared, since its nodes are gone; the same happens,
+ * silently, when the component unmounts. A run that fails shows a toast with the node that failed
+ * first. Needs `ToastProvider` above it.
  */
 export function usePipelineRunner({ llm, onMissingApiKey }: PipelineRunnerOptions): PipelineRunner {
   const pipelineStore = usePipelineStoreApi();
@@ -57,24 +57,27 @@ export function usePipelineRunner({ llm, onMissingApiKey }: PipelineRunnerOption
   const sessionRef = useRef<RunSession | null>(null);
   const [announcement, setAnnouncement] = useState<RunAnnouncement>({ id: 0, message: '' });
 
-  const announce = (message: string) => {
+  const announce = useCallback((message: string) => {
     setAnnouncement((previous) => ({ id: previous.id + 1, message }));
-  };
+  }, []);
 
   useEffect(() => {
-    const discard = () => {
+    /** Drops the run and what it showed; returns whether it was still in progress. */
+    const discard = (): boolean => {
+      const wasRunning = runStore.getState().status === 'running';
       sessionRef.current?.discard();
       sessionRef.current = null;
       runStore.getState().reset();
+      return wasRunning;
     };
     const unsubscribe = pipelineStore.subscribe((state, previous) => {
-      if (state.documentKey !== previous.documentKey) discard();
+      if (state.documentKey !== previous.documentKey && discard()) announce('Run stopped');
     });
     return () => {
       unsubscribe();
       discard();
     };
-  }, [pipelineStore, runStore]);
+  }, [pipelineStore, runStore, announce]);
 
   const run = () => {
     if (runStore.getState().status === 'running') return;
@@ -99,7 +102,7 @@ export function usePipelineRunner({ llm, onMissingApiKey }: PipelineRunnerOption
     announce('Run started');
     void session.ended.then((end) => {
       if (session.discarded) return;
-      announce(describeRunEnd(end, pipeline));
+      announce(describeRunEnd(end));
       const failure = runFailureToast(end, pipeline, onMissingApiKey);
       if (failure !== null) toast(failure);
     });

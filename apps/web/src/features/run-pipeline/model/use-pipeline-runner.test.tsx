@@ -25,7 +25,7 @@ import { usePipelineRunner } from './use-pipeline-runner';
 
 // `breakAfter` makes the engine's `onEvent` throw after that many events, the way a bug in the
 // caller would: `runPipeline` then rejects.
-const engine = vi.hoisted(() => ({ breakAfter: null as number | null }));
+const engine = vi.hoisted((): { breakAfter: number | null } => ({ breakAfter: null }));
 
 vi.mock('@pipeline-builder/core', async (importOriginal) => {
   const core = await importOriginal<typeof Core>();
@@ -56,17 +56,21 @@ interface FakeStream {
   fail: (error: unknown) => void;
 }
 
+/** Where a fake stream is: what it was sent and has not yielded yet, and how it ends. */
+interface FakeStreamState {
+  readonly chunks: string[];
+  ended: boolean;
+  failure: { readonly error: unknown } | null;
+  /** Resumes the stream waiting for the test, if it is. */
+  wake: (() => void) | null;
+}
+
 /** An LLM client whose streams the test drives; it records each one in `streams`. */
 function createFakeLlm() {
   const streams: FakeStream[] = [];
   const llm: LlmClient = {
     stream(request, signal) {
-      const state = {
-        chunks: [] as string[],
-        ended: false,
-        failure: null as { readonly error: unknown } | null,
-        wake: null as (() => void) | null,
-      };
+      const state: FakeStreamState = { chunks: [], ended: false, failure: null, wake: null };
       const notify = () => {
         state.wake?.();
         state.wake = null;
@@ -331,11 +335,11 @@ describe('usePipelineRunner', () => {
     expect(streams[0]?.signal.aborted).toBe(true);
     expect(runStore.getState().status).toBe('idle');
     expect(runStore.getState().nodes.size).toBe(0);
-    expect(announced()).toBe('Run started');
+    expect(announced()).toBe('Run stopped');
   });
 
-  it('forgets a finished run when the document is replaced', async () => {
-    const { pipelineStore, runStore, streams, run } = setUp();
+  it('forgets a finished run when the document is replaced, without a word', async () => {
+    const { pipelineStore, runStore, streams, run, announced } = setUp();
     await run();
     streams[0]?.end();
     await settle();
@@ -346,6 +350,7 @@ describe('usePipelineRunner', () => {
     });
 
     expect(runStore.getState().status).toBe('idle');
+    expect(announced()).toBe('Run finished: 4 nodes done');
   });
 
   it('keeps the run when the document only changes', async () => {
@@ -422,7 +427,8 @@ describe('usePipelineRunner', () => {
     await settle();
 
     expect(runStore.getState().status).toBe('error');
-    expect(announced()).toBe('Run failed at Model: Too many requests. Wait a minute.');
+    // The toast, which screen readers announce too, says why.
+    expect(announced()).toBe('Run failed');
     const toast = notifications().getByRole('listitem');
     expect(toast).toHaveTextContent('Run failed');
     expect(toast).toHaveTextContent('Model: Too many requests. Wait a minute.');
@@ -461,7 +467,7 @@ describe('usePipelineRunner', () => {
     expect(runStore.getState().status).toBe('error');
     expect(nodeRun('question')?.status).toBe('cancelled');
     expect(nodeRun('answer')?.status).toBe('cancelled');
-    expect(announced()).toBe('Run failed unexpectedly');
+    expect(announced()).toBe('Run failed');
     expect(notifications().getByRole('listitem')).toHaveTextContent(
       'Something went wrong while running the pipeline.',
     );

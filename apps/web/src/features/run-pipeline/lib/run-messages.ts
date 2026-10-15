@@ -4,6 +4,7 @@ import {
   type LlmProvider,
   type NodeRunStatus,
   type Pipeline,
+  type RunSummary,
 } from '@pipeline-builder/core';
 
 import type { ToastOptions } from '@/shared/ui/toast';
@@ -39,32 +40,28 @@ export function describeNodeEndings(nodes: ReadonlyMap<string, NodeRunStatus>): 
 
 /**
  * What the run's live region says when it ends: "Run finished: 4 nodes done, 1 skipped", "Run
- * stopped", or "Run failed at Model: …" with the node that failed first.
+ * stopped" or "Run failed". Why a run failed is in its toast (`runFailureToast`), which screen
+ * readers announce too, so it is not said twice.
  */
-export function describeRunEnd(end: RunEnd, pipeline: Pipeline): string {
+export function describeRunEnd(end: RunEnd): string {
   switch (end.type) {
     case 'finished':
-      return describeFinishedRun(end, pipeline);
+      return describeFinishedRun(end.summary);
     case 'invalid':
       return 'Run failed: the pipeline has errors';
     case 'broken':
-      return 'Run failed unexpectedly';
+      return 'Run failed';
   }
 }
 
-function describeFinishedRun(
-  { summary, firstFailure }: Extract<RunEnd, { type: 'finished' }>,
-  pipeline: Pipeline,
-): string {
-  switch (summary.status) {
+function describeFinishedRun({ status, nodes }: RunSummary): string {
+  switch (status) {
     case 'done':
-      return `Run finished: ${describeNodeEndings(summary.nodes)}`;
+      return `Run finished: ${describeNodeEndings(nodes)}`;
     case 'cancelled':
       return 'Run stopped';
     case 'error':
-      return firstFailure === null
-        ? 'Run failed'
-        : `Run failed at ${nodeLabel(pipeline, firstFailure.nodeId)}: ${firstFailure.error.message}`;
+      return 'Run failed';
   }
 }
 

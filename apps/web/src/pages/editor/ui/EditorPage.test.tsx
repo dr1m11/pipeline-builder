@@ -763,6 +763,52 @@ describe('EditorPage runs', () => {
     expect(runButton()).toHaveAccessibleDescription('Fix 1 error to run');
   });
 
+  it('runs with Ctrl+Enter on a selected node, which stays selected', async () => {
+    const fetchMock = stubProxy();
+    openAskPipeline('mock');
+    const { user } = renderPage();
+    const model = await screen.findByRole('group', { name: 'Model' });
+    act(() => {
+      model.focus();
+    });
+    await user.keyboard('{Enter}');
+    const inspector = screen.getByRole('complementary', { name: 'Inspector' });
+    expect(within(inspector).getByRole('heading', { level: 3, name: 'Model' })).toBeVisible();
+
+    // React Flow would take Ctrl+Enter as Enter with its multi-selection key, and deselect.
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Run finished: 4 nodes done');
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(within(inspector).getByRole('heading', { level: 3, name: 'Model' })).toBeVisible();
+    expect(model).toHaveFocus();
+  });
+
+  it('runs with Ctrl+Enter on a focused port without starting a connection', async () => {
+    const fetchMock = stubProxy();
+    openAskPipeline('mock');
+    const { user } = renderPage();
+    const port = (nodeName: string, portName: string) =>
+      within(screen.getByRole('group', { name: nodeName })).getByRole('button', {
+        name: portName,
+      });
+    await screen.findByRole('group', { name: 'Model' });
+    act(() => {
+      port('Model', 'Output response (text)').focus();
+    });
+
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Run finished: 4 nodes done');
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // A started connection would have disabled the ports it cannot end on, such as other outputs.
+    expect(port('Question', 'Output value (text)')).not.toHaveAttribute('aria-disabled');
+  });
+
   it('stops a run with Ctrl+. and lets the user edit meanwhile', async () => {
     const fetchMock = stubProxy(() =>
       eventStream([{ type: 'token', text: 'Because' }], { open: true }),
@@ -812,7 +858,7 @@ describe('EditorPage runs', () => {
     const toast = await notifications().findByRole('listitem');
     expect(toast).toHaveTextContent('Run failed');
     expect(toast).toHaveTextContent('Model: The API key was rejected.');
-    expect(runStatus()).toHaveTextContent('Run failed at Model: The API key was rejected.');
+    expect(runStatus()).toHaveTextContent(/^Run failed$/);
     const region = screen.getByRole('region', { name: 'Notifications (F8)' });
     await waitFor(() => {
       expect(region).not.toHaveStyle({ pointerEvents: 'none' });

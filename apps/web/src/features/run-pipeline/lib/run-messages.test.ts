@@ -58,33 +58,24 @@ describe('describeNodeEndings', () => {
 });
 
 describe('describeRunEnd', () => {
-  const pipeline = askPipeline();
-
   it('counts the nodes of a finished run', () => {
-    expect(describeRunEnd(finished('done', statuses('done', 'done', 'skipped')), pipeline)).toBe(
+    expect(describeRunEnd(finished('done', statuses('done', 'done', 'skipped')))).toBe(
       'Run finished: 2 nodes done, 1 skipped',
     );
   });
 
   it('says that a stopped run stopped', () => {
-    expect(describeRunEnd(finished('cancelled'), pipeline)).toBe('Run stopped');
+    expect(describeRunEnd(finished('cancelled'))).toBe('Run stopped');
   });
 
-  it('names the node that failed first, and why', () => {
-    expect(describeRunEnd(finished('error', statuses(), KEY_REJECTED), pipeline)).toBe(
-      'Run failed at Model: The API key was rejected.',
-    );
-    expect(
-      describeRunEnd(finished('error', statuses(), { ...KEY_REJECTED, nodeId: 'gone' }), pipeline),
-    ).toBe('Run failed at A node: The API key was rejected.');
-    expect(describeRunEnd(finished('error'), pipeline)).toBe('Run failed');
+  // Why is in the toast, which screen readers announce too.
+  it('only says that a failed or broken run failed', () => {
+    expect(describeRunEnd(finished('error', statuses(), KEY_REJECTED))).toBe('Run failed');
+    expect(describeRunEnd({ type: 'broken' })).toBe('Run failed');
   });
 
-  it('says that a refused or broken run failed', () => {
-    expect(describeRunEnd({ type: 'invalid' }, pipeline)).toBe(
-      'Run failed: the pipeline has errors',
-    );
-    expect(describeRunEnd({ type: 'broken' }, pipeline)).toBe('Run failed unexpectedly');
+  it('says why a refused run failed, as no toast does', () => {
+    expect(describeRunEnd({ type: 'invalid' })).toBe('Run failed: the pipeline has errors');
   });
 });
 
@@ -127,6 +118,17 @@ describe('runFailureToast', () => {
       altText: 'Open API keys in the header to add your Anthropic key',
     });
     expect(onAddApiKey).toHaveBeenCalledWith('anthropic');
+  });
+
+  it('names a node the pipeline no longer has by what it is', () => {
+    const toast = runFailureToast(
+      finished('error', statuses(), { ...KEY_REJECTED, nodeId: 'gone' }),
+      askPipeline('anthropic'),
+      vi.fn(),
+    );
+
+    expect(toast).toMatchObject({ description: 'A node: The API key was rejected.' });
+    expect(toast?.action).toBeUndefined();
   });
 
   it('offers no API key for a provider that takes none', () => {
