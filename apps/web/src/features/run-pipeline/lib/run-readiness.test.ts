@@ -6,7 +6,7 @@ import {
 } from '@pipeline-builder/core';
 import { describe, expect, it } from 'vitest';
 
-import { findMissingApiKey, runBlocker } from './run-readiness';
+import { findMissingApiKey, runBlocker, stepBlockers } from './run-readiness';
 
 describe('runBlocker', () => {
   it('asks to fix the errors first', () => {
@@ -75,5 +75,34 @@ describe('findMissingApiKey', () => {
         keys({ anthropic: 'sk-ant', openai: 'sk-openai' }),
       ),
     ).toBeNull();
+  });
+});
+
+describe('stepBlockers', () => {
+  it('asks for a run first', () => {
+    for (const status of ['idle', 'done', 'cancelled'] as const) {
+      expect(stepBlockers({ status, stepping: false, pausedNodeId: null })).toEqual({
+        next: 'Run the pipeline to step through it',
+        continue: 'Run the pipeline to step through it',
+      });
+    }
+  });
+
+  it('offers nothing in a run that does not pause', () => {
+    expect(stepBlockers({ status: 'running', stepping: false, pausedNodeId: null })).toEqual({
+      next: 'The run goes on without pausing',
+      continue: 'The run goes on without pausing',
+    });
+  });
+
+  it('offers Continue while a node runs, and Next step once the run pauses', () => {
+    expect(stepBlockers({ status: 'running', stepping: true, pausedNodeId: null })).toEqual({
+      next: 'A node is running',
+      continue: null,
+    });
+    expect(stepBlockers({ status: 'running', stepping: true, pausedNodeId: 'model' })).toEqual({
+      next: null,
+      continue: null,
+    });
   });
 });

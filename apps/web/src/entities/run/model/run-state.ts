@@ -34,19 +34,34 @@ export interface RunState {
    * order). A node that is not here, such as one added during the run, is idle.
    */
   readonly nodes: ReadonlyMap<string, NodeRunState>;
+  /**
+   * Whether the run in progress goes step by step: it pauses before each node until the user lets
+   * that node run. False while no run is in progress.
+   */
+  readonly stepping: boolean;
+  /**
+   * The node a step-by-step run is paused before: the next one to run, still `queued`. Null while
+   * the run is not paused.
+   */
+  readonly pausedNodeId: string | null;
 }
 
 /** The state of a node that no run has reported; shared, so lookups need not allocate. */
 export const IDLE_NODE_RUN: NodeRunState = Object.freeze({ status: 'idle', text: '' });
 
 /** No run yet, or a forgotten one. */
-export const IDLE_RUN: RunState = Object.freeze({ status: 'idle', nodes: new Map() });
+export const IDLE_RUN: RunState = Object.freeze({
+  status: 'idle',
+  nodes: new Map(),
+  stepping: false,
+  pausedNodeId: null,
+});
 
 /**
  * Applies the events of a run, in order, to `state`. Only a run in progress takes events: they are
  * ignored once the run has finished or been forgotten, so late events of a cancelled run change
- * nothing. `run-finished` sets how the run ended; a node it finds still queued or running (left so
- * by a run that broke off) is `cancelled`.
+ * nothing. `run-finished` sets how the run ended, and ends stepping and any pause; a node it finds
+ * still queued or running (left so by a run that broke off) is `cancelled`.
  *
  * Returns `state` itself when nothing changes. Otherwise the nodes that did not change keep their
  * state objects, so a component that reads one node re-renders only when that node changes.
@@ -98,5 +113,7 @@ export function applyRunEvents(state: RunState, events: readonly RunEvent[]): Ru
   if (status === state.status && changed.size === 0) return state;
   // Nodes known before keep their place; nodes reported for the first time come after them.
   const nodes = changed.size === 0 ? state.nodes : new Map([...state.nodes, ...changed]);
-  return { status, nodes };
+  return status === 'running'
+    ? { ...state, nodes }
+    : { status, nodes, stepping: false, pausedNodeId: null };
 }

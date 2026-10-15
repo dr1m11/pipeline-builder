@@ -8,8 +8,7 @@ import { RunStoreProvider } from '../model/RunStoreProvider';
 import { NodeRunDescription } from './NodeRunDescription';
 import { NodeRunDetails } from './NodeRunDetails';
 import { NodeRunPreview } from './NodeRunPreview';
-import type { ReportedRunStatus } from './RunStatusBadge';
-import { NodeRunBadge } from './RunStatusBadge';
+import { NodeRunBadge, type ShownRunStatus } from './RunStatusBadge';
 
 const model = createNode('llm-call', { id: 'model', label: 'Model', position: { x: 0, y: 0 } });
 
@@ -24,9 +23,13 @@ const RUNNING: readonly RunEvent[] = [
   ...ANSWER.slice(0, 2).map((text): RunEvent => ({ type: 'node-delta', nodeId: 'model', text })),
 ];
 
-/** What a run reports about the model to leave it in each status. */
-const RUNS: Record<ReportedRunStatus, readonly RunEvent[]> = {
+/**
+ * What a run reports about the model to leave it in each status; for `next`, a step-by-step run
+ * then pauses before it.
+ */
+const RUNS: Record<ShownRunStatus, readonly RunEvent[]> = {
   queued: [{ type: 'node-status', nodeId: 'model', status: 'queued' }],
+  next: [{ type: 'node-status', nodeId: 'model', status: 'queued' }],
   running: RUNNING,
   done: [
     ...RUNNING,
@@ -53,11 +56,12 @@ const RUNS: Record<ReportedRunStatus, readonly RunEvent[]> = {
  * The run UI of an LLM Call named "Model" in `status`: what its card shows (status and text), its
  * description, and the inspector's details. The canvas puts the first two into the node's card.
  */
-function NodeRunViewsPreview({ status }: { status: ReportedRunStatus }) {
+function NodeRunViewsPreview({ status }: { status: ShownRunStatus }) {
   const store = useMemo(() => {
     const created = createRunStore();
-    created.getState().start();
+    created.getState().start({ stepping: status === 'next' });
     created.getState().applyEvents(RUNS[status]);
+    if (status === 'next') created.getState().setPausedNode('model');
     return created;
   }, [status]);
   return (
@@ -105,6 +109,18 @@ export const Queued: Story = {
     const card = canvas.getByRole('region', { name: 'Card' });
     await expect(within(card).getByText('Queued')).toBeVisible();
     await expect(card).toHaveTextContent('Run status: queued.');
+  },
+};
+
+/** The node a step-by-step run is paused before: the next one to run. */
+export const Next: Story = {
+  args: { status: 'next' },
+  play: async ({ canvas }) => {
+    const card = canvas.getByRole('region', { name: 'Card' });
+    await expect(within(card).getByText('Next')).toBeVisible();
+    await expect(card).toHaveTextContent('Run status: next. The run is paused before this node.');
+    const inspector = canvas.getByRole('region', { name: 'Inspector' });
+    await expect(within(inspector).getByText('Next')).toBeVisible();
   },
 };
 

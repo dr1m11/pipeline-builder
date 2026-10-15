@@ -35,6 +35,11 @@ export interface NodeRunSlots {
   readonly description?: ReactNode;
   /** Draws the card dimmed, as for a node the run skipped. */
   readonly dimmed?: boolean;
+  /**
+   * Draws the card highlighted, as for the node a step-by-step run is paused before. The colour is
+   * not the only sign: `status` and `description` should say it too.
+   */
+  readonly highlighted?: boolean;
 }
 
 export interface NodeCardProps {
@@ -50,7 +55,8 @@ export interface NodeCardProps {
  * Card of a node on the canvas: kind icon, label, a summary of its settings and its ports. A node
  * with problems gets an error or warning border, a badge with their count and a description that
  * lists them; ports that edges still use but the node lost stay as placeholders. A run adds its
- * status, the node's result and a line of description (`NodeRunSlots`).
+ * status, the node's result and a line of description, and may dim or highlight the card
+ * (`NodeRunSlots`).
  */
 export function NodeCard({
   node,
@@ -71,6 +77,10 @@ export function NodeCard({
         // Dimmed without fading the text, which must keep its contrast: a flat card, dashed.
         run.dimmed === true && 'border-dashed bg-surface-muted shadow-none',
         selected && 'border-accent ring-1 ring-accent',
+        // A frame of its own around the card, beyond the focus outline: the selection's ring, the
+        // problems' border and the focus outline all stay visible beside it.
+        run.highlighted === true &&
+          'relative before:pointer-events-none before:absolute before:-inset-2 before:rounded-2xl before:border-2 before:border-accent',
         problems.severity === 'error' && 'border-danger',
         problems.severity === 'warning' && 'border-warning',
       )}

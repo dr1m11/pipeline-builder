@@ -19,13 +19,20 @@ export const SKIP_REASON_TEXTS = {
   'upstream-failed': 'a node it depends on failed',
 } as const satisfies Record<SkipReason, string>;
 
+/** The node a step-by-step run is paused before, as its badge names it. */
+export const NEXT_NODE_LABEL = 'Next';
+
 /**
  * What the run did to a node, in a sentence for its accessible description: "Run status: failed.
  * The API key was rejected.", "Run status: skipped, its branch was not taken." Empty for a node no
- * run has reported.
+ * run has reported. A node a step-by-step run is `paused` before is the next one to run.
  */
-export function describeNodeRun({ status, error, skipReason }: NodeRunState): string {
+export function describeNodeRun(
+  { status, error, skipReason }: NodeRunState,
+  { paused = false }: { readonly paused?: boolean } = {},
+): string {
   if (status === 'idle') return '';
+  if (paused) return 'Run status: next. The run is paused before this node.';
   const label = NODE_RUN_STATUS_LABELS[status].toLowerCase();
   if (status === 'error' && error !== undefined) {
     return `Run status: ${label}. ${asSentence(error.message)}`;

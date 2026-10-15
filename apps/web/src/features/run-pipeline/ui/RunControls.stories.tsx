@@ -78,17 +78,22 @@ function storyLlm({ stall }: { stall: boolean }): LlmClient {
   };
 }
 
-/** How each node of the run is doing, until the canvas shows it on the nodes. */
+/**
+ * How each node of the run is doing, as the canvas shows it on the nodes: `next` for the node a
+ * step-by-step run is paused before.
+ */
 function NodeStatuses({ pipeline }: { pipeline: Pipeline }) {
   const nodes = useRunStore((state) => state.nodes);
   const status = useRunStore((state) => state.status);
+  const pausedNodeId = useRunStore((state) => state.pausedNodeId);
   return (
     <div className="flex flex-col gap-1 text-xs text-fg-muted">
       <p>Run: {status}</p>
       <ul>
         {pipeline.nodes.map((node) => (
           <li key={node.id}>
-            {node.label}: {nodes.get(node.id)?.status ?? 'idle'}
+            {node.label}:{' '}
+            {node.id === pausedNodeId ? 'next' : (nodes.get(node.id)?.status ?? 'idle')}
           </li>
         ))}
       </ul>
@@ -214,5 +219,59 @@ export const AsksForApiKey: Story = {
     await expect(args.onMissingApiKey).toHaveBeenCalledWith('anthropic');
     await expect(canvas.getByRole('button', { name: 'Run' })).toHaveFocus();
     await expect(canvas.getByText('Run: idle')).toBeVisible();
+  },
+};
+
+/**
+ * Step mode: the run pauses before each node. Next step (or F10) lets that node run, and the run
+ * pauses again before the next one.
+ */
+export const StepModePaused: Story = {
+  args: { stall: true },
+  play: async ({ canvas, userEvent }) => {
+    const stepMode = canvas.getByRole('button', { name: 'Step mode' });
+    await userEvent.click(stepMode);
+    await expect(stepMode).toHaveAttribute('aria-pressed', 'true');
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Run' }));
+
+    await expect(canvas.getByRole('status')).toHaveTextContent('Paused before Question');
+    await expect(canvas.getByText('Question: next')).toBeVisible();
+    const nextStep = canvas.getByRole('button', { name: 'Next step' });
+    await expect(nextStep).not.toHaveAttribute('aria-disabled');
+
+    await userEvent.click(nextStep);
+
+    await waitFor(() =>
+      expect(canvas.getByRole('status')).toHaveTextContent('Paused before Answer prompt'),
+    );
+    await expect(canvas.getByText('Question: done')).toBeVisible();
+    await expect(canvas.getByText('Answer prompt: next')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Continue' })).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  },
+};
+
+/** Continue lets a paused run go on to its end without pausing; step mode stays on. */
+export const StepModeContinue: Story = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('button', { name: 'Step mode' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Run' }));
+    await expect(canvas.getByRole('status')).toHaveTextContent('Paused before Question');
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Continue' }));
+
+    await waitFor(
+      () => expect(canvas.getByRole('status')).toHaveTextContent('Run finished: 4 nodes done'),
+      { timeout: 5000 },
+    );
+    await expect(canvas.getByRole('button', { name: 'Step mode' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(canvas.getByRole('button', { name: 'Next step' })).toHaveAccessibleDescription(
+      'Run the pipeline to step through it',
+    );
   },
 };

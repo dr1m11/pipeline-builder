@@ -1,4 +1,9 @@
-import { type LlmClient, type LlmProvider, validatePipeline } from '@pipeline-builder/core';
+import {
+  findNode,
+  type LlmClient,
+  type LlmProvider,
+  validatePipeline,
+} from '@pipeline-builder/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getApiKey } from '@/entities/api-key';
@@ -35,15 +40,38 @@ export interface PipelineRunner {
    * not added asks for it with `onMissingApiKey` instead.
    */
   readonly run: () => void;
-  /** Stops the run in progress, if any. */
+  /** Stops the run in progress, if any, also while it is paused. */
   readonly stop: () => void;
-  /** The latest message for screen readers: a run started or ended, or why it could not start. */
+  /**
+   * Whether runs go step by step: a run started in step mode pauses before each node, until
+   * `nextStep` lets that node run. Off at first.
+   */
+  readonly stepMode: boolean;
+  /**
+   * Turns step mode on or off, also for the run in progress: on, it pauses before the next node to
+   * start; off, it goes on at once without pausing.
+   */
+  readonly setStepMode: (stepMode: boolean) => void;
+  /** Lets the node the run is paused before run; the run pauses again before the next one. */
+  readonly nextStep: () => void;
+  /**
+   * Lets the run in progress go on to its end without pausing, and says so; step mode stays on for
+   * the next run. Does nothing when no run is going step by step.
+   */
+  readonly continueRun: () => void;
+  /**
+   * The latest message for screen readers: a run started, paused before a node or ended, or why it
+   * could not start.
+   */
   readonly announcement: RunAnnouncement;
 }
 
 /**
  * Runs the pipeline of the surrounding pipeline store and shows the run in the surrounding run
  * store. A run works on a snapshot of the pipeline, so the user may go on editing while it runs.
+ * In step mode it pauses before each node; the run store shows where (`pausedNodeId`), and the
+ * announcement says "Paused before Model" instead of "Run started", then "Running without pausing"
+ * on Continue.
  *
  * A run is cancelled when the document is replaced (an import, a template, a new pipeline, or an
  * undo or a redo of one), and the run store is cleared, since its nodes are gone; the same happens,
@@ -56,6 +84,7 @@ export function usePipelineRunner({ llm, onMissingApiKey }: PipelineRunnerOption
   const { toast } = useToast();
   const sessionRef = useRef<RunSession | null>(null);
   const [announcement, setAnnouncement] = useState<RunAnnouncement>({ id: 0, message: '' });
+  const [stepMode, setStepMode] = useState(false);
 
   const announce = useCallback((message: string) => {
     setAnnouncement((previous) => ({ id: previous.id + 1, message }));
@@ -97,9 +126,14 @@ export function usePipelineRunner({ llm, onMissingApiKey }: PipelineRunnerOption
       pipeline,
       llm: llm ?? createProxyLlmClient({ getApiKey }),
       store: runStore,
+      stepping: stepMode,
+      onPause: (nodeId) => {
+        announce(`Paused before ${findNode(pipeline, nodeId)?.label ?? 'the next node'}`);
+      },
     });
     sessionRef.current = session;
-    announce('Run started');
+    // A run in step mode pauses before its first node at once, which says that it started.
+    if (!stepMode) announce('Run started');
     void session.ended.then((end) => {
       if (session.discarded) return;
       announce(describeRunEnd(end));
@@ -112,5 +146,29 @@ export function usePipelineRunner({ llm, onMissingApiKey }: PipelineRunnerOption
     sessionRef.current?.stop();
   };
 
-  return { run, stop, announcement };
+  const changeStepMode = (value: boolean) => {
+    setStepMode(value);
+    sessionRef.current?.setStepping(value);
+  };
+
+  const nextStep = () => {
+    sessionRef.current?.next();
+  };
+
+  const continueRun = () => {
+    const { status, stepping } = runStore.getState();
+    if (status !== 'running' || !stepping) return;
+    sessionRef.current?.setStepping(false);
+    announce('Running without pausing');
+  };
+
+  return {
+    run,
+    stop,
+    stepMode,
+    setStepMode: changeStepMode,
+    nextStep,
+    continueRun,
+    announcement,
+  };
 }

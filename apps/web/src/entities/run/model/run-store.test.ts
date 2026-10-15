@@ -69,3 +69,93 @@ describe('createRunStore', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 });
+
+describe('createRunStore step by step', () => {
+  /** A store whose run goes step by step and has reported its nodes queued. */
+  function stepping() {
+    const store = createRunStore();
+    store.getState().start({ stepping: true });
+    store.getState().applyEvents(QUEUED);
+    return store;
+  }
+
+  it('starts a run that goes step by step, or not', () => {
+    const store = createRunStore();
+    expect(store.getState()).toMatchObject({ stepping: false, pausedNodeId: null });
+
+    store.getState().start({ stepping: true });
+    expect(store.getState()).toMatchObject({ status: 'running', stepping: true });
+
+    store.getState().start();
+    expect(store.getState().stepping).toBe(false);
+  });
+
+  it('pauses before a node, and goes on', () => {
+    const store = stepping();
+
+    store.getState().setPausedNode('input');
+    expect(store.getState().pausedNodeId).toBe('input');
+
+    store.getState().setPausedNode(null);
+    expect(store.getState().pausedNodeId).toBeNull();
+  });
+
+  it('does not pause a run that does not go step by step, or no run', () => {
+    const store = createRunStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.getState().setPausedNode('input');
+    store.getState().setStepping(true);
+    expect(listener).not.toHaveBeenCalled();
+
+    store.getState().start();
+    store.getState().setPausedNode('input');
+
+    expect(store.getState().pausedNodeId).toBeNull();
+  });
+
+  it('stops pausing when the run stops going step by step, and starts again', () => {
+    const store = stepping();
+    store.getState().setPausedNode('input');
+
+    store.getState().setStepping(false);
+    expect(store.getState()).toMatchObject({ stepping: false, pausedNodeId: null });
+
+    store.getState().setStepping(true);
+    expect(store.getState()).toMatchObject({ stepping: true, pausedNodeId: null });
+  });
+
+  it('notifies nobody when nothing changes', () => {
+    const store = stepping();
+    store.getState().setPausedNode('input');
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.getState().setPausedNode('input');
+    store.getState().setStepping(true);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('forgets the pause when the run finishes, is reset or the next one starts', () => {
+    const store = stepping();
+    store.getState().setPausedNode('input');
+
+    store.getState().applyEvents([{ type: 'run-finished', status: 'cancelled' }]);
+    expect(store.getState()).toMatchObject({ stepping: false, pausedNodeId: null });
+
+    for (const forget of [
+      () => {
+        store.getState().reset();
+      },
+      () => {
+        store.getState().start({ stepping: true });
+      },
+    ]) {
+      store.getState().start({ stepping: true });
+      store.getState().setPausedNode('output');
+      forget();
+      expect(store.getState().pausedNodeId).toBeNull();
+    }
+  });
+});

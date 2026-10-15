@@ -1,5 +1,5 @@
 import { type LlmClient, type LlmProvider, validatePipeline } from '@pipeline-builder/core';
-import { LoaderCircle, Play, Square } from 'lucide-react';
+import { FastForward, Footprints, LoaderCircle, Play, Square, StepForward } from 'lucide-react';
 import { Fragment, useId, useRef, useState } from 'react';
 
 import { usePipelineStore } from '@/entities/pipeline';
@@ -14,9 +14,9 @@ import { Button } from '@/shared/ui/button';
 import { Kbd } from '@/shared/ui/kbd';
 import { Tooltip } from '@/shared/ui/tooltip';
 
-import { RUN_SHORTCUT, STOP_SHORTCUT } from '../config/shortcuts';
-import { runBlocker } from '../lib/run-readiness';
-import { usePipelineRunner } from '../model/use-pipeline-runner';
+import { NEXT_STEP_SHORTCUT, RUN_SHORTCUT, STOP_SHORTCUT } from '../config/shortcuts';
+import { runBlocker, stepBlockers } from '../lib/run-readiness';
+import { type PipelineRunner, usePipelineRunner } from '../model/use-pipeline-runner';
 import { useRunShortcuts } from '../model/use-run-shortcuts';
 
 export interface RunControlsProps {
@@ -38,7 +38,11 @@ const UNAVAILABLE = 'aria-disabled:cursor-not-allowed aria-disabled:opacity-50';
  * Run and Stop for the surrounding pipeline, with Ctrl/⌘+Enter and Ctrl/⌘+. (see `RUN_SHORTCUTS`).
  * Run is unavailable while the pipeline has validation errors or no nodes, and says why ("Fix 2
  * errors to run") in its tooltip and its accessible description; Stop is available while a run is
- * in progress. A polite live region announces when a run starts and ends, never single tokens.
+ * in progress. A polite live region announces when a run starts, pauses, goes on without pausing
+ * and ends, never single tokens.
+ *
+ * The Step mode toggle makes runs pause before each node. While it is on, Next step (F10) lets
+ * the node the run is paused before run, and Continue lets the run go on without pausing.
  *
  * Mount it once per editor, under the pipeline and run stores and `ToastProvider`: it owns the
  * editor's run, which stops when it unmounts or when the document is replaced.
@@ -59,6 +63,8 @@ export function RunControls({ onMissingApiKey, llm }: RunControlsProps) {
   const [apple] = useState(() => isApplePlatform());
   const reasonId = useId();
   const running = useRunStore((state) => state.status === 'running');
+  // A run paused before a node waits for the user: nothing spins.
+  const working = useRunStore((state) => state.status === 'running' && state.pausedNodeId === null);
   const nodeCount = usePipelineStore((state) => state.pipeline.nodes.length);
   // The count alone, so that an edit re-renders Run only when the count changes. Core caches the
   // report per pipeline, so the canvas and the inspector share it (see docs/adr/0008).
@@ -85,7 +91,7 @@ export function RunControls({ onMissingApiKey, llm }: RunControlsProps) {
           }}
           className={`${UNAVAILABLE} aria-disabled:hover:bg-accent`}
         >
-          {running ? (
+          {working ? (
             <LoaderCircle aria-hidden className="motion-safe:animate-spin" />
           ) : (
             <Play aria-hidden />
@@ -112,10 +118,97 @@ export function RunControls({ onMissingApiKey, llm }: RunControlsProps) {
           Stop
         </Button>
       </Tooltip>
+      <StepControls runner={runner} apple={apple} />
       {/* A new message replaces the node, so the same message twice is announced twice. */}
       <p role="status" className="sr-only">
         <span key={runner.announcement.id}>{runner.announcement.message}</span>
       </p>
+    </>
+  );
+}
+
+interface StepControlsProps {
+  runner: PipelineRunner;
+  apple: boolean;
+}
+
+/**
+ * The Step mode toggle and, while it is on, Next step and Continue. Unavailable controls stay
+ * focusable and say why, like Run.
+ */
+function StepControls({ runner, apple }: StepControlsProps) {
+  const nextReasonId = useId();
+  const continueReasonId = useId();
+  const status = useRunStore((state) => state.status);
+  const stepping = useRunStore((state) => state.stepping);
+  const pausedNodeId = useRunStore((state) => state.pausedNodeId);
+  const blockers = stepBlockers({ status, stepping, pausedNodeId });
+
+  return (
+    <>
+      <span aria-hidden className="mx-1 h-5 w-px bg-border" />
+      <Tooltip side="bottom" content="Pause before each node">
+        <Button
+          variant="secondary"
+          aria-pressed={runner.stepMode}
+          onClick={() => {
+            runner.setStepMode(!runner.stepMode);
+          }}
+          className="aria-pressed:border-accent aria-pressed:bg-accent/15"
+        >
+          <Footprints aria-hidden />
+          Step mode
+        </Button>
+      </Tooltip>
+      {runner.stepMode && (
+        <>
+          <Tooltip
+            side="bottom"
+            content={
+              blockers.next ?? (
+                <ShortcutHint
+                  label="Run the next node"
+                  shortcut={NEXT_STEP_SHORTCUT}
+                  apple={apple}
+                />
+              )
+            }
+          >
+            <Button
+              variant="secondary"
+              aria-disabled={blockers.next === null ? undefined : true}
+              {...(blockers.next === null ? {} : { 'aria-describedby': nextReasonId })}
+              onClick={() => {
+                runner.nextStep();
+              }}
+              className={`${UNAVAILABLE} aria-disabled:hover:bg-surface`}
+            >
+              <StepForward aria-hidden />
+              Next step
+            </Button>
+          </Tooltip>
+          <span id={nextReasonId} hidden>
+            {blockers.next}
+          </span>
+          <Tooltip side="bottom" content={blockers.continue ?? 'Run the rest without pausing'}>
+            <Button
+              variant="secondary"
+              aria-disabled={blockers.continue === null ? undefined : true}
+              {...(blockers.continue === null ? {} : { 'aria-describedby': continueReasonId })}
+              onClick={() => {
+                runner.continueRun();
+              }}
+              className={`${UNAVAILABLE} aria-disabled:hover:bg-surface`}
+            >
+              <FastForward aria-hidden />
+              Continue
+            </Button>
+          </Tooltip>
+          <span id={continueReasonId} hidden>
+            {blockers.continue}
+          </span>
+        </>
+      )}
     </>
   );
 }

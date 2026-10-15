@@ -74,9 +74,9 @@ vi.mock('@/entities/run', async (importOriginal) => {
 
 const NODE_COUNT = 50;
 
-/** `NODE_COUNT` LLM Calls in a grid, with ids `llm-0`, `llm-1`… */
-function manyLlmCalls(): Pipeline {
-  return Array.from({ length: NODE_COUNT }).reduce<Pipeline>(
+/** `count` LLM Calls in a grid, with ids `llm-0`, `llm-1`… and labels `LLM Call 1`… */
+function manyLlmCalls(count = NODE_COUNT): Pipeline {
+  return Array.from({ length: count }).reduce<Pipeline>(
     (pipeline, _, index) =>
       addNode(pipeline, {
         kind: 'llm-call',
@@ -90,6 +90,27 @@ function manyLlmCalls(): Pipeline {
 // Rendering 50 nodes in jsdom, and querying them by role, takes seconds on a busy machine.
 const TIMEOUT_MS = 30_000;
 
+/** The canvas over `pipeline` and a new run store, once React Flow shows the node `lastNode`. */
+async function renderCanvas(pipeline: Pipeline, lastNode: string) {
+  const runStore = createRunStore();
+  render(
+    <PipelineStoreProvider store={createPipelineStore(pipeline)}>
+      <RunStoreProvider store={runStore}>
+        <div style={{ width: 1200, height: 600 }}>
+          <PipelineCanvas />
+        </div>
+      </RunStoreProvider>
+    </PipelineStoreProvider>,
+  );
+  // React Flow shows nodes once it has measured them; the last one comes last.
+  await screen.findByRole('group', { name: lastNode }, { timeout: TIMEOUT_MS });
+  return runStore;
+}
+
+function clearRenders(): void {
+  for (const counts of Object.values(renders)) counts.clear();
+}
+
 describe('CanvasNode', () => {
   it(
     're-renders only the run text of the node a token streams into, in a pipeline of 50 nodes',
@@ -97,24 +118,7 @@ describe('CanvasNode', () => {
       timeout: TIMEOUT_MS,
     },
     async () => {
-      const runStore = createRunStore();
-      render(
-        <PipelineStoreProvider store={createPipelineStore(manyLlmCalls())}>
-          <RunStoreProvider store={runStore}>
-            <div style={{ width: 1200, height: 600 }}>
-              <PipelineCanvas />
-            </div>
-          </RunStoreProvider>
-        </PipelineStoreProvider>,
-      );
-      // React Flow shows nodes once it has measured them; the last one comes last.
-      await screen.findByRole(
-        'group',
-        { name: `LLM Call ${String(NODE_COUNT)}` },
-        {
-          timeout: TIMEOUT_MS,
-        },
-      );
+      const runStore = await renderCanvas(manyLlmCalls(), `LLM Call ${String(NODE_COUNT)}`);
       expect(screen.getAllByRole('group', { name: /^LLM Call \d+$/ })).toHaveLength(NODE_COUNT);
       act(() => {
         runStore.getState().start();
@@ -127,7 +131,7 @@ describe('CanvasNode', () => {
           { type: 'node-status', nodeId: 'llm-25', status: 'running' },
         ]);
       });
-      for (const counts of Object.values(renders)) counts.clear();
+      clearRenders();
 
       const tokens = [
         'The ',
@@ -154,4 +158,43 @@ describe('CanvasNode', () => {
       expect(renders.descriptions.size).toBe(0);
     },
   );
+
+  it('highlights the node a step-by-step run is paused before, re-rendering only the cards concerned', async () => {
+    const runStore = await renderCanvas(manyLlmCalls(3), 'LLM Call 3');
+    act(() => {
+      runStore.getState().start({ stepping: true });
+      runStore.getState().applyEvents(
+        ['llm-0', 'llm-1', 'llm-2'].map((nodeId) => ({
+          type: 'node-status' as const,
+          nodeId,
+          status: 'queued' as const,
+        })),
+      );
+      runStore.getState().setPausedNode('llm-0');
+    });
+    const first = screen.getByRole('group', { name: 'LLM Call 1' });
+    const second = screen.getByRole('group', { name: 'LLM Call 2' });
+    expect(within(first).getByText('Next')).toBeInTheDocument();
+    expect(first).toHaveAccessibleDescription(
+      /Run status: next\. The run is paused before this node\./,
+    );
+    expect(second).toHaveAccessibleDescription(/Run status: queued\./);
+    clearRenders();
+
+    act(() => {
+      runStore.getState().setPausedNode('llm-1');
+    });
+
+    expect(within(first).queryByText('Next')).not.toBeInTheDocument();
+    expect(within(first).getByText('Queued')).toBeInTheDocument();
+    expect(within(second).getByText('Next')).toBeInTheDocument();
+    expect(second).toHaveAccessibleDescription(/Run status: next\./);
+    // The card the pause left and the one it reached render once each; the third, not at all.
+    expect(new Map(renders.cards)).toEqual(
+      new Map([
+        ['llm-0', 1],
+        ['llm-1', 1],
+      ]),
+    );
+  });
 });

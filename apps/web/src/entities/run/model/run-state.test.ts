@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { applyRunEvents, IDLE_NODE_RUN, IDLE_RUN, type RunState } from './run-state';
 
-const RUNNING: RunState = { status: 'running', nodes: new Map() };
+const RUNNING: RunState = { ...IDLE_RUN, status: 'running' };
 
 function status(
   nodeId: string,
@@ -121,6 +121,16 @@ describe('applyRunEvents', () => {
 
     expect(finished.nodes.get('input')?.status).toBe('cancelled');
     expect(applyRunEvents(finished, [status('input', 'done')])).toBe(finished);
+  });
+
+  it('keeps a pause while the run goes on, and ends it with the run', () => {
+    const paused: RunState = { ...RUNNING, stepping: true, pausedNodeId: 'llm' };
+
+    const going = applyRunEvents(paused, [...QUEUED, status('input', 'done')]);
+    expect(going).toMatchObject({ stepping: true, pausedNodeId: 'llm' });
+
+    const finished = applyRunEvents(going, [{ type: 'run-finished', status: 'cancelled' }]);
+    expect(finished).toMatchObject({ status: 'cancelled', stepping: false, pausedNodeId: null });
   });
 
   it('ignores events when no run is in progress', () => {

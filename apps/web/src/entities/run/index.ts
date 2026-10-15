@@ -4,6 +4,7 @@ export { createRunStore, type RunActions, type RunStore } from './model/run-stor
 export { RunStoreProvider, type RunStoreProviderProps } from './model/RunStoreProvider';
 export {
   useEdgeFlow,
+  useIsPausedBefore,
   useNodeRun,
   useNodeRunStatus,
   useRunStore,

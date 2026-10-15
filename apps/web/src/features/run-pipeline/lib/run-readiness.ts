@@ -5,6 +5,8 @@ import {
   type ValidationReport,
 } from '@pipeline-builder/core';
 
+import type { RunState } from '@/entities/run';
+
 /**
  * Why a pipeline cannot run, as the Run button explains it ("Fix 2 errors to run"), or null when
  * it can: validation errors block a run (see docs/adr/0008), and an empty pipeline has nothing to
@@ -35,4 +37,30 @@ export function findMissingApiKey(
     if (LLM_PROVIDER_INFO[provider].needsApiKey && getApiKey(provider) === null) return provider;
   }
   return null;
+}
+
+/** Why Next step and Continue are unavailable; null for one that is available. */
+export interface StepBlockers {
+  readonly next: string | null;
+  readonly continue: string | null;
+}
+
+/**
+ * Why the controls of step mode are unavailable for the run in `state`, as their tooltips say it.
+ * Next step needs a run paused before a node; Continue, a run going step by step, paused or not.
+ */
+export function stepBlockers({
+  status,
+  stepping,
+  pausedNodeId,
+}: Pick<RunState, 'status' | 'stepping' | 'pausedNodeId'>): StepBlockers {
+  if (status !== 'running') {
+    const reason = 'Run the pipeline to step through it';
+    return { next: reason, continue: reason };
+  }
+  if (!stepping) {
+    const reason = 'The run goes on without pausing';
+    return { next: reason, continue: reason };
+  }
+  return { next: pausedNodeId === null ? 'A node is running' : null, continue: null };
 }

@@ -21,7 +21,7 @@ import { createRunStore, RunStoreProvider } from '@/entities/run';
 import { ToastProvider } from '@/shared/ui/toast';
 import { TooltipProvider } from '@/shared/ui/tooltip';
 
-import { usePipelineRunner } from './use-pipeline-runner';
+import { type PipelineRunner, usePipelineRunner } from './use-pipeline-runner';
 
 // `breakAfter` makes the engine's `onEvent` throw after that many events, the way a bug in the
 // caller would: `runPipeline` then rejects.
@@ -475,5 +475,195 @@ describe('usePipelineRunner', () => {
       'The pipeline run failed unexpectedly',
       new Error('A bug in the caller'),
     );
+  });
+});
+
+describe('usePipelineRunner in step mode', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  /** `setUp`, with the runner's step actions, each followed by what the run does next. */
+  function setUpSteps() {
+    const setup = setUp();
+    const perform = async (action: (runner: PipelineRunner) => void) => {
+      act(() => {
+        action(setup.result.current);
+      });
+      await settle();
+    };
+    return {
+      ...setup,
+      setStepMode: (stepMode: boolean) =>
+        perform((runner) => {
+          runner.setStepMode(stepMode);
+        }),
+      nextStep: () =>
+        perform((runner) => {
+          runner.nextStep();
+        }),
+      continueRun: () =>
+        perform((runner) => {
+          runner.continueRun();
+        }),
+      stop: () =>
+        perform((runner) => {
+          runner.stop();
+        }),
+      paused: () => setup.runStore.getState().pausedNodeId,
+    };
+  }
+
+  it('pauses before every node in order, and runs one node per step', async () => {
+    const { runStore, streams, run, announced, nodeRun, setStepMode, nextStep, paused } =
+      setUpSteps();
+    await setStepMode(true);
+
+    await run();
+
+    expect(runStore.getState()).toMatchObject({ status: 'running', stepping: true });
+    expect(paused()).toBe('question');
+    // The pause says that the run started.
+    expect(announced()).toBe('Paused before Question');
+    expect(nodeRun('question')?.status).toBe('queued');
+
+    await nextStep();
+    expect(paused()).toBe('prompt');
+    expect(announced()).toBe('Paused before Answer prompt');
+    // The store shows the step that ended without waiting for a frame.
+    expect(nodeRun('question')?.status).toBe('done');
+    expect(nodeRun('prompt')?.status).toBe('queued');
+
+    await nextStep();
+    expect(paused()).toBe('model');
+    expect(streams).toHaveLength(0);
+
+    await nextStep();
+    expect(paused()).toBeNull();
+    expect(streams).toHaveLength(1);
+    nextFrame();
+    expect(nodeRun('model')?.status).toBe('running');
+    // Nothing waits while the model answers: another step changes nothing.
+    await nextStep();
+    nextFrame();
+    expect(nodeRun('answer')?.status).toBe('queued');
+
+    streams[0]?.send('Blue.');
+    streams[0]?.end();
+    await settle();
+    expect(paused()).toBe('answer');
+    expect(announced()).toBe('Paused before Answer');
+    expect(nodeRun('model')).toMatchObject({ status: 'done', text: 'Blue.' });
+
+    await nextStep();
+    expect(runStore.getState()).toMatchObject({
+      status: 'done',
+      stepping: false,
+      pausedNodeId: null,
+    });
+    expect(nodeRun('answer')).toMatchObject({ status: 'done', outputs: { value: 'Blue.' } });
+    expect(announced()).toBe('Run finished: 4 nodes done');
+  });
+
+  it('runs the rest without pausing on Continue, and steps again in the next run', async () => {
+    const { result, runStore, streams, run, announced, nodeRun, setStepMode, continueRun, paused } =
+      setUpSteps();
+    await setStepMode(true);
+    await run();
+
+    await continueRun();
+
+    expect(announced()).toBe('Running without pausing');
+    expect(paused()).toBeNull();
+    expect(runStore.getState().stepping).toBe(false);
+    expect(streams).toHaveLength(1);
+    streams[0]?.end();
+    await settle();
+    expect(runStore.getState().status).toBe('done');
+    expect(nodeRun('answer')?.status).toBe('done');
+    expect(result.current.stepMode).toBe(true);
+
+    await run();
+
+    expect(paused()).toBe('question');
+  });
+
+  it('stops a paused run, and forgets the pause', async () => {
+    const { runStore, stream, run, announced, nodeRun, setStepMode, nextStep, stop, paused } =
+      setUpSteps();
+    await setStepMode(true);
+    await run();
+    await nextStep();
+    await nextStep();
+    expect(paused()).toBe('model');
+
+    await stop();
+
+    expect(runStore.getState()).toMatchObject({
+      status: 'cancelled',
+      stepping: false,
+      pausedNodeId: null,
+    });
+    expect(nodeRun('prompt')?.status).toBe('done');
+    expect(nodeRun('model')?.status).toBe('cancelled');
+    expect(nodeRun('answer')?.status).toBe('cancelled');
+    expect(stream).not.toHaveBeenCalled();
+    expect(announced()).toBe('Run stopped');
+  });
+
+  it('goes on at once when step mode is turned off during a run', async () => {
+    const { result, runStore, streams, run, setStepMode, paused } = setUpSteps();
+    await setStepMode(true);
+    await run();
+    expect(paused()).toBe('question');
+
+    await setStepMode(false);
+
+    expect(result.current.stepMode).toBe(false);
+    expect(paused()).toBeNull();
+    expect(runStore.getState().stepping).toBe(false);
+    expect(streams).toHaveLength(1);
+    streams[0]?.end();
+    await settle();
+    expect(runStore.getState().status).toBe('done');
+  });
+
+  it('pauses before the next node when step mode is turned on during a run', async () => {
+    const { runStore, streams, run, announced, nodeRun, setStepMode, nextStep, paused } =
+      setUpSteps();
+    await run();
+    expect(announced()).toBe('Run started');
+    expect(streams).toHaveLength(1);
+
+    await setStepMode(true);
+    expect(runStore.getState().stepping).toBe(true);
+    // The model is answering: the run pauses once it is done.
+    expect(paused()).toBeNull();
+    streams[0]?.end();
+    await settle();
+
+    expect(paused()).toBe('answer');
+    expect(announced()).toBe('Paused before Answer');
+    expect(nodeRun('model')?.status).toBe('done');
+    await nextStep();
+    expect(runStore.getState().status).toBe('done');
+  });
+
+  it('runs without pausing while step mode is off, where Next step and Continue do nothing', async () => {
+    const { runStore, streams, run, announced, nextStep, continueRun, paused } = setUpSteps();
+
+    await run();
+    await nextStep();
+    await continueRun();
+
+    expect(announced()).toBe('Run started');
+    expect(runStore.getState().stepping).toBe(false);
+    expect(paused()).toBeNull();
+    expect(streams).toHaveLength(1);
   });
 });

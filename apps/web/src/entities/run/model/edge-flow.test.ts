@@ -5,7 +5,7 @@ import { edgeFlow } from './edge-flow';
 import { applyRunEvents, IDLE_RUN, type RunState } from './run-state';
 
 function runWith(...events: readonly RunEvent[]): RunState {
-  return applyRunEvents({ status: 'running', nodes: new Map() }, events);
+  return applyRunEvents({ ...IDLE_RUN, status: 'running' }, events);
 }
 
 const PROMPT_TO_LLM = { source: 'prompt', sourcePort: 'prompt', target: 'llm' } as const;
