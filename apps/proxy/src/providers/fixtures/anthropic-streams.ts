@@ -4,13 +4,18 @@ import { TEST_API_KEY } from './fake-upstream';
 // over the wire. Event order, field order and ids follow the streams and error bodies documented
 // at https://platform.claude.com/docs/en/build-with-claude/streaming and
 // https://platform.claude.com/docs/en/api/errors (no API key was at hand to record live ones); the
-// texts are made up. Claude Haiku 5.5 thinks by default; it sends its thinking block with an empty
-// `thinking` field and only a signature unless asked for a summary.
+// texts are made up. Claude Haiku 5.5 thinks by default and, unless the request asks for a summary
+// (`display: "summarized"`), sends its thinking block with an empty `thinking` field and only a
+// signature.
 
 /** The text `ANTHROPIC_ANSWER` streams, with characters of two to four bytes in UTF-8. */
 export const ANTHROPIC_ANSWER_TEXT = 'The sky is blue: небо голубое, 天空是蓝色的 🌍✨';
 
-/** A whole answer: thinking, then a text block, then the end of the message. */
+/**
+ * A whole answer: thinking, then a text block, then the end of the message. Its thinking block
+ * carries a summary, as with `display: "summarized"`, so tests can check that thinking text never
+ * reaches the answer.
+ */
 export const ANTHROPIC_ANSWER = `event: message_start
 data: {"type":"message_start","message":{"id":"msg_01XFDUDYJgAACzvnptvVoYEL","type":"message","role":"assistant","model":"claude-haiku-5-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":21,"output_tokens":1}}}
 
@@ -114,14 +119,18 @@ export const ANTHROPIC_REFUSAL = `event: message_start
 data: {"type":"message_start","message":{"id":"msg_01MZ2HTAy1R5q6dWWsJ7vzFq","type":"message","role":"assistant","model":"claude-haiku-5-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":21,"output_tokens":1}}}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"stop_reason":"refusal","stop_sequence":null,"stop_details":null},"usage":{"output_tokens":1}}
+data: {"type":"message_delta","delta":{"stop_reason":"refusal","stop_sequence":null,"stop_details":{"type":"refusal","category":null,"explanation":null}},"usage":{"output_tokens":1}}
 
 event: message_stop
 data: {"type":"message_stop"}
 
 `;
 
-/** Error bodies of the API by HTTP status. Some of their messages repeat parts of the request. */
+/**
+ * Error bodies of the API by HTTP status. Some of their messages repeat parts of the request, and
+ * the 401 quotes the test key in full (the real one leaves it out), so tests can check that no
+ * message the proxy writes repeats either.
+ */
 export const ANTHROPIC_ERROR_BODIES = {
   400: '{"type":"error","error":{"type":"invalid_request_error","message":"model: claude-haiku-9 was not found for the prompt \\"Why is the sky blue?\\""},"request_id":"req_011CSHoEeqs5C35K2UUqR7Fy"}',
   401: `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key: ${TEST_API_KEY}"},"request_id":"req_011CSHoEeqs5C35K2UUqR7Fz"}`,

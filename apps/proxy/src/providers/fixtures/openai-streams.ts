@@ -115,7 +115,11 @@ data: {"type":"error","code":"rate_limit_exceeded","message":"Rate limit reached
 
 `;
 
-/** Error bodies of the API by HTTP status. Some of their messages repeat parts of the request. */
+/**
+ * Error bodies of the API by HTTP status. Some of their messages repeat parts of the request, and
+ * the 401 quotes the test key in full (the real one masks most of it), so tests can check that no
+ * message the proxy writes repeats either.
+ */
 export const OPENAI_ERROR_BODIES = {
   400: '{"error":{"message":"Invalid \'max_output_tokens\' for the prompt \\"Why is the sky blue?\\": integer below minimum value.","type":"invalid_request_error","param":"max_output_tokens","code":"integer_below_min_value"}}',
   401: `{"error":{"message":"Incorrect API key provided: ${TEST_API_KEY}. You can find your API key at https://platform.openai.com/account/api-keys.","type":"invalid_request_error","param":null,"code":"invalid_api_key"}}`,
