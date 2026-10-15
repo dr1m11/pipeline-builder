@@ -310,8 +310,15 @@ function streams(nodeId: string, text: string): RunEvent[] {
   ];
 }
 
-const ANSWER =
-  'The sky looks blue because air scatters sunlight.\nShort blue waves scatter far more than red ones,\nso blue light reaches your eyes from every part of the sky.';
+// Longer than a card shows: its last lines are in view, and the rest scrolls.
+const ANSWER = [
+  'The sky looks blue because air scatters sunlight.',
+  'Short blue waves scatter far more than red ones,',
+  'so blue light reaches your eyes from every part of the sky.',
+  'At sunset the light crosses more air,',
+  'the blue is scattered away before it arrives,',
+  'and the reds and oranges are left.',
+].join('\n');
 
 const meta = {
   title: 'widgets/PipelineCanvas',
@@ -596,7 +603,13 @@ export const RunInProgress: Story = {
   play: async ({ canvasElement }) => {
     const model = await within(canvasElement).findByRole('group', { name: 'Model' });
     await expect(within(model).getByText('Running')).toBeVisible();
-    await expect(within(model).getByRole('textbox', { name: 'Model response' })).toBeVisible();
+    const preview = within(model).getByRole('textbox', { name: 'Model response' });
+    await expect(preview).toBeVisible();
+    // The text overflows at the top: its last lines are the ones in view.
+    const text = preview.getBoundingClientRect();
+    const shown = preview.firstElementChild?.getBoundingClientRect();
+    await expect(shown?.top).toBeLessThan(text.top);
+    await expect(shown?.bottom).toBeLessThanOrEqual(text.bottom);
     await expect(await descriptionOf(canvasElement, 'Model')).toMatch(/Run status: running\./);
     await expect(await descriptionOf(canvasElement, 'Answer')).toMatch(/Run status: queued\./);
   },
