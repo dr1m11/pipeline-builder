@@ -9,6 +9,7 @@ import {
   OPENAI_FAILED_MIDWAY,
   OPENAI_INCOMPLETE_AFTER_TEXT,
   OPENAI_INCOMPLETE_WHILE_REASONING,
+  OPENAI_REFUSAL,
 } from './fixtures/openai-streams';
 import {
   createOpenAiProvider,
@@ -122,6 +123,24 @@ describe('createOpenAiProvider', () => {
         ),
       );
     });
+
+    it('fails with bad-request when the model writes a refusal, without its text', async () => {
+      const { texts, error } = await run(OPENAI_REFUSAL);
+
+      expect(texts).toEqual([]);
+      expect(error).toEqual(new LlmError('bad-request', 'OpenAI declined to answer this prompt.'));
+    });
+
+    it.each(['response.refusal.delta', 'response.refusal.done'])(
+      'treats %s alone as a refusal',
+      async (event) => {
+        const { error } = await run(`event: ${event}\ndata: {"type":"${event}"}\n\n`);
+
+        expect(error).toEqual(
+          new LlmError('bad-request', 'OpenAI declined to answer this prompt.'),
+        );
+      },
+    );
 
     it('fails with bad-request when the content filter stops the answer', async () => {
       const { error } = await run(OPENAI_CONTENT_FILTERED);

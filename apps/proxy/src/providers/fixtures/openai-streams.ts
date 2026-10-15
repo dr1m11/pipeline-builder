@@ -70,6 +70,30 @@ data: {"type":"response.incomplete","sequence_number":7,"response":{"id":"resp_6
 
 `;
 
+/** The model declined: its message holds a refusal instead of text. */
+export const OPENAI_REFUSAL = `${CREATED}event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":4,"output_index":1,"item":{"id":"msg_68f0a1b3d4e5f607","type":"message","status":"in_progress","role":"assistant","content":[]}}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","sequence_number":5,"item_id":"msg_68f0a1b3d4e5f607","output_index":1,"content_index":0,"part":{"type":"refusal","refusal":""}}
+
+event: response.refusal.delta
+data: {"type":"response.refusal.delta","sequence_number":6,"item_id":"msg_68f0a1b3d4e5f607","output_index":1,"content_index":0,"delta":"I can't help with that."}
+
+event: response.refusal.done
+data: {"type":"response.refusal.done","sequence_number":7,"item_id":"msg_68f0a1b3d4e5f607","output_index":1,"content_index":0,"refusal":"I can't help with that."}
+
+event: response.content_part.done
+data: {"type":"response.content_part.done","sequence_number":8,"item_id":"msg_68f0a1b3d4e5f607","output_index":1,"content_index":0,"part":{"type":"refusal","refusal":"I can't help with that."}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":9,"output_index":1,"item":{"id":"msg_68f0a1b3d4e5f607","type":"message","status":"completed","role":"assistant","content":[{"type":"refusal","refusal":"I can't help with that."}]}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":10,"response":{"id":"resp_68f0a1b2c3d4e5f60718293a4b5c6d7e","object":"response","created_at":1760400000,"status":"completed","error":null,"incomplete_details":null,"model":"gpt-6-luna","usage":{"input_tokens":21,"output_tokens":9,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":30}}}
+
+`;
+
 /** The content filter stopped the response. */
 export const OPENAI_CONTENT_FILTERED = `${CREATED}event: response.incomplete
 data: {"type":"response.incomplete","sequence_number":4,"response":{"id":"resp_68f0a1b2c3d4e5f60718293a4b5c6d7e","object":"response","created_at":1760400000,"status":"incomplete","error":null,"incomplete_details":{"reason":"content_filter"},"model":"gpt-6-luna","usage":null}}

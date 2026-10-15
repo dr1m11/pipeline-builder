@@ -44,7 +44,8 @@ interface ResponsesRequest {
  *
  * The text of `response.output_text.delta` events is the answer and `response.completed` ends it.
  * `response.incomplete` ends it too, unless the content filter stopped it or the token limit came
- * before any text; `response.failed` and `error` events fail it by their error code.
+ * before any text; a refusal (`response.refusal.delta` or `.done`) fails it with `bad-request`;
+ * `response.failed` and `error` events fail it by their error code.
  */
 export function createOpenAiProvider(options?: UpstreamProviderOptions): Provider {
   return createUpstreamProvider(
@@ -85,6 +86,10 @@ function createResponsesEventReader(): UpstreamEventReader {
         wroteText ||= text !== '';
         return { type: 'text', text };
       }
+      case 'response.refusal.delta':
+      case 'response.refusal.done':
+        // The model writes why it declines; the proxy reports the refusal, not the text.
+        return { type: 'error', error: refusalError(TITLE) };
       case 'response.completed':
         return { type: 'done' };
       case 'response.incomplete': {
