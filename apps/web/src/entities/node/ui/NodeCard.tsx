@@ -25,7 +25,7 @@ import { PortHandle, type PortProblem } from './PortHandle';
  */
 export interface NodeRunSlots {
   /**
-   * The run status, in the header after the problems badge. It is hidden from assistive technology:
+   * The run status, at the end of the summary's row. It is hidden from assistive technology:
    * `description` says it.
    */
   readonly status?: ReactNode;
@@ -83,17 +83,19 @@ export function NodeCard({
             <span className="text-xs text-fg-muted">{title}</span>
           )}
           <ProblemsBadge problems={problems} />
-          {/* The node's description says it, so the status is for sighted users only. */}
-          {run.status !== undefined && (
-            <span aria-hidden className="flex">
-              {run.status}
-            </span>
-          )}
         </span>
       </div>
-      <p className="truncate border-b border-border px-3 py-1.5 text-xs text-fg-muted">
-        {describeNode(node)}
-      </p>
+      {/* The run status shares the summary's row rather than the header, where the label needs the
+          room. The node's description says it, so it is for sighted users only; a slot that shows
+          nothing takes no room. */}
+      <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
+        <p className="min-w-0 flex-1 truncate text-xs text-fg-muted">{describeNode(node)}</p>
+        {run.status !== undefined && (
+          <span aria-hidden className="flex shrink-0 empty:hidden">
+            {run.status}
+          </span>
+        )}
+      </div>
       <div className="py-1.5 text-xs">
         {inputs.map((port) => (
           <PortRow
