@@ -76,7 +76,7 @@ Every pull request runs:
 | Lint & typecheck | Prettier, ESLint with type-aware rules, Steiger, TypeScript strict (no `any`)   |
 | Unit tests       | Vitest + Testing Library; ≥ 80% coverage on `packages/core`, reported on the PR |
 | Storybook tests  | Every story renders and runs its interaction test in Chromium, with axe checks  |
-| E2E              | Playwright against the production build, with axe and a console-error guard     |
+| E2E              | Playwright on the Worker serving the build, with axe and a console-error guard  |
 | PR title         | Conventional Commits (the squash-merge commit message)                          |
 | Preview          | A deployed preview URL commented on the PR                                      |
 
@@ -99,7 +99,7 @@ pnpm storybook    # http://localhost:6006
 | `pnpm test`            | Unit tests (`core`, `proxy` and `web` projects)                |
 | `pnpm test:coverage`   | Unit tests with coverage thresholds                            |
 | `pnpm test:storybook`  | Stories as browser tests (requires `playwright install`)       |
-| `pnpm test:e2e`        | Playwright e2e against `vite preview` (run `pnpm build` first) |
+| `pnpm test:e2e`        | Playwright e2e against `wrangler dev` (run `pnpm build` first) |
 | `pnpm build-storybook` | Static Storybook in `apps/web/storybook-static`                |
 
 ## Performance
