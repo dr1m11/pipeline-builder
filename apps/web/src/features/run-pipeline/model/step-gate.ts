@@ -9,8 +9,8 @@ export interface StepGateOptions {
 
 /**
  * What lets the nodes of a run start (the engine's `beforeNode`, see docs/adr/0011). Stepping, it
- * lets one node start at a time: it pauses before a node once the node it let through before has
- * ended, until `next`. Otherwise it lets every node start at once.
+ * lets one node start at a time: it pauses before a node once every node it let through has ended,
+ * until `next`. Otherwise it lets every node start at once.
  */
 export interface StepGate {
   /** For `RunOptions.beforeNode`: settles when the node `nodeId` may start. */
