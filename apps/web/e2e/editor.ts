@@ -68,6 +68,14 @@ export function editor(page: Page) {
      * "Run failed"; or why the pipeline cannot run.
      */
     runStatus: runToolbar.getByRole('status'),
+    /**
+     * What a node shows of its run on its card, as a read-only text field: the text an LLM Call
+     * streams ("Model response") or the value an Output gets ("Answer result").
+     */
+    runPreview: (nodeName: string, valueName: 'response' | 'result') =>
+      node(nodeName).getByRole('textbox', { name: `${nodeName} ${valueName}`, exact: true }),
+    /** The inspector's account of what the run did to the selected node, with its full values. */
+    runOutput: inspector.getByRole('region', { name: 'Run output' }),
     apiKeysButton: page.getByRole('button', { name: 'API keys', exact: true }),
     apiKeysDialog: page.getByRole('dialog', { name: 'API keys' }),
     shortcutsButton: page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }),

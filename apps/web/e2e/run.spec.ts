@@ -30,7 +30,7 @@ async function localStorageEntriesWith(page: Page, text: string): Promise<string
 }
 
 test.describe('running pipelines', () => {
-  test('runs each template through the proxy, streaming the answers', async ({
+  test('runs each template through the proxy, streaming the answers onto the canvas', async ({
     page,
     expectNoA11yViolations,
   }) => {
@@ -38,9 +38,13 @@ test.describe('running pipelines', () => {
     const {
       heading,
       templateButtons,
+      node,
+      inspector,
       runButton,
       stopButton,
       runStatus,
+      runPreview,
+      runOutput,
       toasts,
       chooseFromNewMenu,
     } = editor(page);
@@ -64,48 +68,96 @@ test.describe('running pipelines', () => {
     });
     // The mock needs no key, so none is sent.
     expect(await stream.request().headerValue('authorization')).toBeNull();
-    // The answer is still streaming in: the run goes on, and Stop is there for it.
+
+    // The answer shows on the Model as it streams in, while the run goes on: the Answer has
+    // nothing yet, and Stop is there for the run.
+    await expect(runPreview('Model', 'response')).toContainText('**Why is the sky blue?**');
     await expect(runStatus).toHaveText('Run started');
+    await expect(node('Model')).toHaveAccessibleDescription(/Run status: running\./);
+    await expect(node('Model').getByText('Running', { exact: true })).toBeVisible();
+    await expect(runPreview('Answer', 'result')).toHaveCount(0);
     await expect(stopButton).not.toHaveAttribute('aria-disabled');
     await expect(runButton).toHaveAttribute('aria-disabled', 'true');
     await expect(runButton).toHaveAccessibleDescription('The pipeline is running');
     await expectNoA11yViolations();
 
+    // Then the Answer shows the whole answer, and every node is done.
     await expect(runStatus).toHaveText('Run finished: 4 nodes done');
+    const answer = runPreview('Answer', 'result');
+    await expect(answer).toContainText('**Why is the sky blue?**');
+    await expect(answer).toContainText('fills JSON objects with a name and an email.');
+    for (const name of ['Question', 'Answer prompt', 'Model', 'Answer']) {
+      await expect(node(name)).toHaveAccessibleDescription(/Run status: done\./);
+    }
+    await expect(node('Answer').getByText('Done', { exact: true })).toBeVisible();
     await expect(stopButton).toHaveAttribute('aria-disabled', 'true');
     await expect(runButton).not.toHaveAttribute('aria-disabled');
     await expect(toasts).toHaveCount(0);
 
-    // "Route by sentiment", run from the keyboard: the review is positive, so the Negative
-    // Output gets nothing and is skipped.
+    // "Route by sentiment", run from the keyboard: the review is positive, so the Positive Output
+    // gets the answer, and the Negative one, on the branch not taken, is skipped.
     await chooseFromNewMenu('Route by sentiment');
     await expect(heading).toHaveText('Route by sentiment');
     await page.keyboard.press('ControlOrMeta+Enter');
     await expect(runStatus).toHaveText('Run finished: 5 nodes done, 1 skipped');
+    await expect(runPreview('Positive', 'result')).toHaveText('positive');
+    await expect(node('Negative')).toHaveAccessibleDescription(
+      /Run status: skipped, its branch was not taken\./,
+    );
+    await expect(node('Negative').getByText('Skipped', { exact: true })).toBeVisible();
+    await expect(runPreview('Negative', 'result')).toHaveCount(0);
 
-    // "Extract a JSON field": the mock answers with JSON, which both Transforms can read.
+    // "Extract a JSON field": the mock answers with JSON, which the Transforms parse and read.
     await chooseFromNewMenu('Extract a JSON field');
     await expect(heading).toHaveText('Extract a JSON field');
     await runButton.click();
     await expect(runStatus).toHaveText('Run finished: 6 nodes done');
+    await expect(runPreview('Email', 'result')).toHaveText('ada@example.com');
     await expect(toasts).toHaveCount(0);
+
+    // A selected node's values are in full in the inspector, also for a node whose card shows
+    // none, like a Transform.
+    await node('Parse JSON').focus();
+    await page.keyboard.press('Enter');
+    await expect(inspector.getByRole('heading', { name: 'Parse JSON', level: 3 })).toBeVisible();
+    await expect(runOutput).toContainText('Done');
+    await expect(runOutput.getByRole('figure', { name: 'result' })).toContainText(
+      '"email": "ada@example.com"',
+    );
     await expectNoA11yViolations();
   });
 
   test('stops a run, and does not run a pipeline with errors', async ({ page }) => {
     await page.goto('/');
-    const { templateButtons, inspector, runButton, stopButton, runStatus, toasts, select } =
-      editor(page);
+    const {
+      templateButtons,
+      node,
+      inspector,
+      runButton,
+      stopButton,
+      runStatus,
+      runPreview,
+      toasts,
+      select,
+    } = editor(page);
     const requests = recordLlmRequests(page);
     await templateButtons.getByRole('button', { name: 'Ask a question' }).click();
 
-    // Stop cancels the run while the answer streams in, and the browser drops the stream.
+    // Stop cancels the run while the answer streams in, and the browser drops the stream. The
+    // nodes that had not ended are cancelled, and the Model keeps the text it got.
     const dropped = page.waitForEvent('requestfailed', (request) => isLlmStream(request.url()));
     await runButton.click();
-    await expect(runStatus).toHaveText('Run started');
+    await expect(runPreview('Model', 'response')).toContainText('**Why is the sky blue?**');
     await stopButton.click();
     await expect(runStatus).toHaveText('Run stopped');
     await dropped;
+    await expect(node('Answer prompt')).toHaveAccessibleDescription(/Run status: done\./);
+    for (const name of ['Model', 'Answer']) {
+      await expect(node(name)).toHaveAccessibleDescription(/Run status: cancelled\./);
+      await expect(node(name).getByText('Cancelled', { exact: true })).toBeVisible();
+    }
+    await expect(runPreview('Model', 'response')).toContainText('**Why is the sky blue?**');
+    await expect(runPreview('Answer', 'result')).toHaveCount(0);
     await expect(stopButton).toHaveAttribute('aria-disabled', 'true');
     await expect(runButton).not.toHaveAttribute('aria-disabled');
     await expect(toasts).toHaveCount(0);
@@ -134,6 +186,7 @@ test.describe('running pipelines', () => {
     await page.goto('/');
     const {
       templateButtons,
+      node,
       inspector,
       runButton,
       runStatus,
@@ -186,6 +239,16 @@ test.describe('running pipelines', () => {
     await runButton.click();
     await expect(toast('Run failed')).toContainText('Model: The Anthropic API key was rejected.');
     await expect(runStatus).toHaveText('Run failed');
+    // The Model failed with the provider's message, and the Answer, which needs it, is skipped.
+    await expect(node('Model')).toHaveAccessibleDescription(
+      /Run status: failed\. The Anthropic API key was rejected\./,
+    );
+    await expect(
+      node('Model').getByText('The Anthropic API key was rejected.', { exact: true }),
+    ).toBeVisible();
+    await expect(node('Answer')).toHaveAccessibleDescription(
+      /Run status: skipped, a node it depends on failed\./,
+    );
     expect(requests).toHaveLength(1);
     const [request] = requests;
     expect(request?.url()).toBe(new URL(LLM_STREAM_PATH, page.url()).href);
