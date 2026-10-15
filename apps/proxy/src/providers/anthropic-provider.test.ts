@@ -155,6 +155,25 @@ describe('createAnthropicProvider', () => {
       );
     });
 
+    it('keeps the usual message for a 400 that quotes the spend limit text mid-message', async () => {
+      const body = JSON.stringify({
+        type: 'error',
+        error: {
+          type: 'invalid_request_error',
+          message: 'prompt: "You have reached your specified API usage limits" is not valid',
+        },
+      });
+
+      const { error } = await run({ status: 400, body: [body] });
+
+      expect(error).toEqual(
+        new LlmError(
+          'bad-request',
+          'Anthropic rejected the request (HTTP 400, invalid_request_error). Check the model and Max tokens.',
+        ),
+      );
+    });
+
     it('keeps the usual messages for a bad request and a rate limit', async () => {
       const badRequest = await run({ status: 400, body: [ANTHROPIC_ERROR_BODIES[400]] });
       const rateLimit = await run({ status: 429, body: [ANTHROPIC_ERROR_BODIES[429]] });

@@ -129,6 +129,10 @@ export const OPENAI_ERROR_BODIES = {
   503: '{"error":{"message":"The engine is currently overloaded, please try again later.","type":"server_error","param":null,"code":null}}',
 } as const;
 
-/** The account of the key has used up its quota or credit (429 `insufficient_quota`). */
+/** The account of the key has used up its quota (429 `insufficient_quota`). */
 export const OPENAI_QUOTA_BODY =
-  '{"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota","param":null,"code":"insufficient_quota"}}';
+  '{"error":{"message":"Retrying billing, spend, or quota errors won\'t restore API access. Update the relevant credits or limits before sending another request.","type":"insufficient_quota","param":null,"code":"insufficient_quota"}}';
+
+/** The organization has no prepaid credits left: a newer billing code under the same type. */
+export const OPENAI_CREDIT_EXHAUSTED_BODY =
+  '{"error":{"message":"Your organization has no prepaid credits remaining.","type":"insufficient_quota","param":null,"code":"credit_balance_exhausted"}}';

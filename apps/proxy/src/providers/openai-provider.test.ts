@@ -5,6 +5,7 @@ import { errorEvent, type FakeAnswer, runProvider, TEST_API_KEY } from './fixtur
 import {
   OPENAI_ANSWER,
   OPENAI_CONTENT_FILTERED,
+  OPENAI_CREDIT_EXHAUSTED_BODY,
   OPENAI_ERROR_BODIES,
   OPENAI_ERROR_EVENT,
   OPENAI_FAILED_MIDWAY,
@@ -163,6 +164,36 @@ describe('createOpenAiProvider', () => {
       );
     });
 
+    it('points to billing for a newer billing code under the quota type', async () => {
+      const { error } = await run({ status: 429, body: [OPENAI_CREDIT_EXHAUSTED_BODY] });
+
+      expect(error).toEqual(
+        new LlmError(
+          'rate-limited',
+          'OpenAI refused the request because the account of this API key is out of credit or over a spending limit (HTTP 429, credit_balance_exhausted). Check its plan and billing.',
+        ),
+      );
+    });
+
+    it.each([
+      'credit_balance_exhausted',
+      'organization_spend_limit_exceeded',
+      'project_spend_limit_exceeded',
+      'organization_usage_limit_exceeded',
+    ])('points to billing for the code %s alone', async (code) => {
+      const { error } = await run({
+        status: 429,
+        body: [JSON.stringify({ error: { message: 'Limit', type: 'requests', code } })],
+      });
+
+      expect(error).toEqual(
+        new LlmError(
+          'rate-limited',
+          `OpenAI refused the request because the account of this API key is out of credit or over a spending limit (HTTP 429, ${code}). Check its plan and billing.`,
+        ),
+      );
+    });
+
     it('asks to wait for a rate limit', async () => {
       const { error } = await run({ status: 429, body: [OPENAI_ERROR_BODIES[429]] });
 
@@ -183,6 +214,47 @@ describe('createOpenAiProvider', () => {
         new LlmError(
           'rate-limited',
           'OpenAI refused the request because the account of this API key is out of credit or over a spending limit (insufficient_quota). Check its plan and billing.',
+        ),
+      );
+    });
+  });
+
+  describe('billing failures in the stream', () => {
+    it.each([
+      'credit_balance_exhausted',
+      'organization_spend_limit_exceeded',
+      'project_spend_limit_exceeded',
+      'organization_usage_limit_exceeded',
+    ])('point to billing for %s in a failed response', async (code) => {
+      const failed = JSON.stringify({
+        type: 'response.failed',
+        response: { status: 'failed', error: { code, message: 'Limit' } },
+      });
+
+      const { error } = await run(`event: response.failed\ndata: ${failed}\n\n`);
+
+      expect(error).toEqual(
+        new LlmError(
+          'rate-limited',
+          `OpenAI refused the request because the account of this API key is out of credit or over a spending limit (${code}). Check its plan and billing.`,
+        ),
+      );
+    });
+
+    it('point to billing for a billing code in an error object whose type is the quota', async () => {
+      const { error } = await run(
+        errorEvent(
+          JSON.stringify({
+            type: 'error',
+            error: { type: 'insufficient_quota', code: 'project_spend_limit_exceeded' },
+          }),
+        ),
+      );
+
+      expect(error).toEqual(
+        new LlmError(
+          'rate-limited',
+          'OpenAI refused the request because the account of this API key is out of credit or over a spending limit (project_spend_limit_exceeded). Check its plan and billing.',
         ),
       );
     });

@@ -138,14 +138,27 @@ function failure(code: string | undefined, type: string | undefined): UpstreamSt
   };
 }
 
-/** Whether the account of the key has used up its quota or credit (`insufficient_quota`). */
+/**
+ * Error codes of a 429 that the account must fix, which no retry helps: no credit or quota left,
+ * or a spend or usage limit reached. With the newer codes, `error.type` can still be
+ * `insufficient_quota` (https://developers.openai.com/api/docs/guides/error-codes).
+ */
+const BILLING_CODES: ReadonlySet<string> = new Set([
+  'insufficient_quota',
+  'credit_balance_exhausted',
+  'organization_spend_limit_exceeded',
+  'project_spend_limit_exceeded',
+  'organization_usage_limit_exceeded',
+]);
+
+/** Whether the account of the key cannot pay for the request, by the error's code or type. */
 function isQuotaFailure(code: string | undefined, type: string | undefined): boolean {
-  return code === 'insufficient_quota' || type === 'insufficient_quota';
+  return [code, type].some((value) => value !== undefined && BILLING_CODES.has(value));
 }
 
 /** What an error code or type of the Responses API means for the user. */
 function failureCode(code: string | undefined, type: string | undefined): UpstreamFailureCode {
-  if (code === 'rate_limit_exceeded' || code === 'insufficient_quota') return 'rate-limited';
+  if (code === 'rate_limit_exceeded' || isQuotaFailure(code, type)) return 'rate-limited';
   if (code === 'invalid_api_key' || type === 'authentication_error') return 'invalid-key';
   if (code === 'invalid_prompt' || type === 'invalid_request_error') return 'bad-request';
   return 'upstream-error';
