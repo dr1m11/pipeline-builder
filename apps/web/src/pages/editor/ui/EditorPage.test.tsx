@@ -527,7 +527,11 @@ describe('EditorPage keyboard shortcuts help', () => {
       expect(within(edit).getByRole('row', { name: row })).toBeInTheDocument();
     }
     const run = within(dialog).getByRole('table', { name: 'Run' });
-    for (const row of ['Run the pipeline Ctrl Enter', 'Stop the run Ctrl .']) {
+    for (const row of [
+      'Run the pipeline Ctrl Enter',
+      'Stop the run Ctrl .',
+      'Run the next node in step mode F10',
+    ]) {
       expect(within(run).getByRole('row', { name: row })).toBeInTheDocument();
     }
     const canvas = within(dialog).getByRole('table', { name: 'Canvas' });
@@ -883,6 +887,54 @@ describe('EditorPage runs', () => {
     });
     expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     expect(await screen.findByRole('group', { name: 'Output 1' })).toBeInTheDocument();
+  });
+
+  it('steps through a run, showing the node it is paused before', async () => {
+    const fetchMock = stubProxy();
+    openAskPipeline('mock');
+    const { user } = renderPage();
+    const node = (name: string) => screen.getByRole('group', { name });
+    await screen.findByRole('group', { name: 'Answer' });
+    await user.click(runToolbar().getByRole('button', { name: 'Step mode' }));
+
+    await user.click(runButton());
+
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Paused before Question');
+    });
+    expect(within(node('Question')).getByText('Next')).toBeInTheDocument();
+    expect(node('Question')).toHaveAccessibleDescription(
+      /Run status: next\. The run is paused before this node\./,
+    );
+    await user.click(runToolbar().getByRole('button', { name: 'Next step' }));
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Paused before Answer prompt');
+    });
+    expect(node('Question')).toHaveAccessibleDescription(/Run status: done\./);
+    expect(within(node('Answer prompt')).getByText('Next')).toBeInTheDocument();
+
+    // F10 works from the canvas too.
+    act(() => {
+      node('Answer prompt').focus();
+    });
+    await user.keyboard('{F10}');
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Paused before Model');
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    await user.keyboard('{F10}');
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Paused before Answer');
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(node('Model')).toHaveAccessibleDescription(/Run status: done\./);
+    await user.keyboard('{F10}');
+
+    await waitFor(() => {
+      expect(runStatus()).toHaveTextContent('Run finished: 4 nodes done');
+    });
+    expect(within(node('Answer')).queryByText('Next')).not.toBeInTheDocument();
+    expect(node('Answer prompt')).toHaveFocus();
   });
 
   it('asks for a missing API key, then gives focus back to Run', async () => {

@@ -11,6 +11,7 @@ import {
   updateNodeData,
 } from '@pipeline-builder/core';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import { useMemo } from 'react';
 import { expect, waitFor, within } from 'storybook/test';
 
@@ -95,19 +96,22 @@ interface CanvasPreviewProps {
   pipeline: Pipeline;
   /** Events of a run in progress, or of a run that `run-finished` ended; none by default. */
   run?: readonly RunEvent[];
+  /** The node the run in progress is paused before, step by step; none by default. */
+  pausedBefore?: string;
 }
 
 /** The canvas over its own stores, at a fixed size: React Flow needs a sized parent. */
-function CanvasPreview({ pipeline, run = [] }: CanvasPreviewProps) {
+function CanvasPreview({ pipeline, run = [], pausedBefore }: CanvasPreviewProps) {
   const store = useMemo(() => createPipelineStore(pipeline), [pipeline]);
   const runStore = useMemo(() => {
     const created = createRunStore();
     if (run.length > 0) {
-      created.getState().start();
+      created.getState().start({ stepping: pausedBefore !== undefined });
       created.getState().applyEvents(run);
+      if (pausedBefore !== undefined) created.getState().setPausedNode(pausedBefore);
     }
     return created;
-  }, [run]);
+  }, [run, pausedBefore]);
   return (
     <PipelineStoreProvider store={store}>
       <RunStoreProvider store={runStore}>
@@ -202,6 +206,59 @@ function ReplaceDocumentPreview() {
         <div className="h-[30rem] w-[60rem]">
           <PipelineCanvas />
         </div>
+      </RunStoreProvider>
+    </PipelineStoreProvider>
+  );
+}
+
+/** Zooms in twice as close, on the middle of the view, at once. */
+function ZoomInButton() {
+  const { zoomTo } = useReactFlow();
+  return (
+    <Button
+      onClick={() => {
+        void zoomTo(2);
+      }}
+    >
+      Zoom in on the middle
+    </Button>
+  );
+}
+
+/**
+ * "Ask a question" in a run that goes step by step, with buttons that pause it before a node, as
+ * the runner does; the story checks that the canvas brings that node into view.
+ */
+function PausedNodeRevealPreview() {
+  const pipeline = template('ask-a-question');
+  const store = useMemo(() => createPipelineStore(pipeline), [pipeline]);
+  const runStore = useMemo(() => {
+    const created = createRunStore();
+    created.getState().start({ stepping: true });
+    created.getState().applyEvents(queued(pipeline));
+    return created;
+  }, [pipeline]);
+  return (
+    <PipelineStoreProvider store={store}>
+      <RunStoreProvider store={runStore}>
+        <ReactFlowProvider>
+          <div className="flex gap-2">
+            <ZoomInButton />
+            {pipeline.nodes.map((node) => (
+              <Button
+                key={node.id}
+                onClick={() => {
+                  runStore.getState().setPausedNode(node.id);
+                }}
+              >
+                Pause before {node.label}
+              </Button>
+            ))}
+          </div>
+          <div className="h-[30rem] w-[60rem]">
+            <PipelineCanvas />
+          </div>
+        </ReactFlowProvider>
       </RunStoreProvider>
     </PipelineStoreProvider>
   );
@@ -704,5 +761,58 @@ export const RunStopped: Story = {
     await expect(within(model).getByRole('textbox', { name: 'Model response' })).toHaveTextContent(
       'The sky looks blue because air',
     );
+  },
+};
+
+/**
+ * Step by step, paused before the model: its card is highlighted and says Next, in words as well
+ * as in colour, until the user lets it run.
+ */
+export const PausedBeforeNode: Story = {
+  args: {
+    pipeline: template('ask-a-question'),
+    run: [
+      ...queued(template('ask-a-question')),
+      ...done('question', { value: 'Why is the sky blue?' }),
+      ...done('prompt', { prompt: 'Answer the question: Why is the sky blue?' }),
+    ],
+    pausedBefore: 'model',
+  },
+  play: async ({ canvasElement }) => {
+    const model = await within(canvasElement).findByRole('group', { name: 'Model' });
+    await expect(within(model).getByText('Next')).toBeVisible();
+    await expect(await descriptionOf(canvasElement, 'Model')).toMatch(
+      /Run status: next\. The run is paused before this node\./,
+    );
+    const prompt = within(canvasElement).getByRole('group', { name: 'Answer prompt' });
+    await expect(within(prompt).getByText('Done')).toBeVisible();
+    await expect(within(prompt).queryByText('Next')).not.toBeInTheDocument();
+  },
+};
+
+/**
+ * Zoomed in on the middle of the pipeline: the view moves to each node the run pauses before that
+ * is out of view, keeping the zoom.
+ */
+export const RevealPausedNode: Story = {
+  render: () => <PausedNodeRevealPreview />,
+  play: async ({ canvas, userEvent }) => {
+    const flow = canvas.getByRole('application');
+    const answer = await canvas.findByRole('group', { name: 'Answer' });
+    const question = canvas.getByRole('group', { name: 'Question' });
+    await userEvent.click(canvas.getByRole('button', { name: 'Zoom in on the middle' }));
+    await waitFor(() => expect(isInside(answer, flow)).toBe(false));
+    await expect(isInside(question, flow)).toBe(false);
+    const width = answer.getBoundingClientRect().width;
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Pause before Answer' }));
+
+    await waitFor(() => expect(isInside(answer, flow)).toBe(true));
+    await expect(within(answer).getByText('Next')).toBeVisible();
+    await expect(answer.getBoundingClientRect().width).toBeCloseTo(width, 0);
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Pause before Question' }));
+
+    await waitFor(() => expect(isInside(question, flow)).toBe(true));
   },
 };

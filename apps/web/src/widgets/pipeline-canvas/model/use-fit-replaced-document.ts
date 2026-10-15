@@ -5,8 +5,7 @@ import { useEffect, useRef } from 'react';
 import { usePipelineStore, usePipelineStoreApi } from '@/entities/pipeline';
 import { useMediaQuery } from '@/shared/lib/media';
 
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
-const FIT_DURATION_MS = 200;
+import { REDUCED_MOTION_QUERY, VIEWPORT_MOVE_MS } from '../config/viewport';
 // Fitting a small pipeline would otherwise zoom far in.
 const FIT_MAX_ZOOM = 1;
 const DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 1 };
@@ -26,13 +25,13 @@ export function useFitReplacedDocument(): void {
   const flowStore = useStoreApi();
   const documentKey = usePipelineStore((state) => state.documentKey);
   const { fitView, setViewport } = useReactFlow();
-  const reducedMotion = useMediaQuery(REDUCED_MOTION);
+  const reducedMotion = useMediaQuery(REDUCED_MOTION_QUERY);
   const shownKeyRef = useRef(documentKey);
 
   useEffect(() => {
     if (shownKeyRef.current === documentKey) return;
     shownKeyRef.current = documentKey;
-    const duration = reducedMotion ? 0 : FIT_DURATION_MS;
+    const duration = reducedMotion ? 0 : VIEWPORT_MOVE_MS;
     if (store.getState().pipeline.nodes.length > 0) {
       // React Flow keeps the fit pending until the new nodes are measured. It also jumps to a node
       // that gets focus off screen, so focus waits for the fit.

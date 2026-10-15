@@ -22,6 +22,7 @@ import { toConnectionCandidate } from '../model/flow-connections';
 import type { PipelineFlowEdge } from '../model/flow-elements';
 import { useFitReplacedDocument } from '../model/use-fit-replaced-document';
 import { useFlowElements } from '../model/use-flow-elements';
+import { useRevealPausedNode } from '../model/use-reveal-paused-node';
 import { CanvasEdge } from './CanvasEdge';
 import { CanvasNode } from './CanvasNode';
 
@@ -48,7 +49,8 @@ function clearTextSelection(): void {
  * The pipeline from the surrounding store on a React Flow canvas. React Flow is a controlled view:
  * it reports changes, the store applies them through core operations, and the canvas re-renders
  * from the store (see docs/adr/0006). Nodes and edges also show what the run in the surrounding
- * run store does: statuses, streamed text, and the edges that carry data.
+ * run store does: statuses, streamed text, and the edges that carry data; the node a step-by-step
+ * run is paused before is highlighted and brought into view.
  */
 export function PipelineCanvas() {
   const store = usePipelineStoreApi();
@@ -118,6 +120,7 @@ export function PipelineCanvas() {
       <Controls />
       <MiniMap ariaLabel="Pipeline overview" />
       <FitReplacedDocument />
+      <RevealPausedNode />
     </ReactFlow>
   );
 }
@@ -129,5 +132,11 @@ export function PipelineCanvas() {
  */
 function FitReplacedDocument() {
   useFitReplacedDocument();
+  return null;
+}
+
+/** Brings the node a step-by-step run is paused before into view; a child of `<ReactFlow>` too. */
+function RevealPausedNode() {
+  useRevealPausedNode();
   return null;
 }
