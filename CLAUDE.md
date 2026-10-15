@@ -14,7 +14,7 @@ Product scope: `docs/product-spec.md`. Stages and current stage: `docs/roadmap.m
 | `pnpm typecheck`                   | `tsc` across the workspace                                                                                 |
 | `pnpm test` / `pnpm test:coverage` | Vitest projects `core` + `proxy` + `web` (core coverage gate 80%)                                          |
 | `pnpm test:storybook`              | Stories as tests in Vitest browser mode                                                                    |
-| `pnpm test:e2e`                    | Playwright against `vite preview`                                                                          |
+| `pnpm test:e2e`                    | Playwright against the built Worker (`wrangler dev` of `apps/proxy` on :8788, SPA + `/api`)                |
 | `pnpm storybook`                   | Storybook on :6006 (also enables the `storybook` MCP server)                                               |
 | `pnpm format`                      | Prettier write                                                                                             |
 
