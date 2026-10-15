@@ -3,7 +3,7 @@ import { useId } from 'react';
 
 import { formatRunValue, SKIP_REASON_TEXTS } from '../lib/describe-node-run';
 import type { NodeRunState } from '../model/run-state';
-import { useNodeRun } from '../model/store-context';
+import { useIsPausedBefore, useNodeRun } from '../model/store-context';
 import { RunStatusBadge } from './RunStatusBadge';
 
 /** A value the node produced, under the name of its port. */
@@ -13,19 +13,21 @@ interface ShownValue {
 }
 
 /**
- * Everything the run did to `node`, for the inspector: its status, why it failed or was skipped,
- * and the full value of each output (text as written, other values as indented JSON), or the
- * response streamed so far. Nothing while no run has reported the node.
+ * Everything the run did to `node`, for the inspector: its status (Next while a step-by-step run is
+ * paused before it), why it failed or was skipped, and the full value of each output (text as
+ * written, other values as indented JSON), or the response streamed so far. Nothing while no run
+ * has reported the node.
  */
 export function NodeRunDetails({ node }: { node: PipelineNode }) {
   const run = useNodeRun(node.id);
+  const paused = useIsPausedBefore(node.id);
   if (run.status === 'idle') return null;
   const values = shownValues(node, run);
 
   return (
     <div className="flex flex-col gap-2 text-sm">
       <p className="flex items-center gap-2">
-        <RunStatusBadge status={run.status} />
+        <RunStatusBadge status={paused ? 'next' : run.status} />
         {run.status === 'skipped' && run.skipReason !== undefined && (
           <span className="text-fg-muted">Because {SKIP_REASON_TEXTS[run.skipReason]}</span>
         )}

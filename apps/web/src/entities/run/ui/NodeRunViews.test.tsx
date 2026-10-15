@@ -70,6 +70,40 @@ describe('NodeRunBadge', () => {
   });
 });
 
+describe('the node a step-by-step run is paused before', () => {
+  it('is named Next by its badge, its description and its details, until the run goes on', () => {
+    const store = createRunStore();
+    store.getState().start({ stepping: true });
+    store.getState().applyEvents([status('model', 'queued')]);
+    store.getState().setPausedNode('model');
+    render(
+      <RunStoreProvider store={store}>
+        <section aria-label="Card">
+          <NodeRunBadge nodeId="model" />
+          <p>
+            <NodeRunDescription nodeId="model" />
+          </p>
+        </section>
+        <section aria-label="Inspector">
+          <NodeRunDetails node={model} />
+        </section>
+      </RunStoreProvider>,
+    );
+    const card = screen.getByRole('region', { name: 'Card' });
+    const inspector = screen.getByRole('region', { name: 'Inspector' });
+    expect(card).toHaveTextContent('Next');
+    expect(card).toHaveTextContent('Run status: next. The run is paused before this node.');
+    expect(inspector).toHaveTextContent('Next');
+
+    act(() => {
+      store.getState().setPausedNode(null);
+    });
+
+    expect(card).toHaveTextContent(/^QueuedRun status: queued\.$/);
+    expect(inspector).toHaveTextContent('Queued');
+  });
+});
+
 describe('NodeRunDescription', () => {
   it('describes what the run did to the node', () => {
     const { apply } = renderWithRun(

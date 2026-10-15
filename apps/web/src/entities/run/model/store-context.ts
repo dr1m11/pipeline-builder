@@ -40,6 +40,14 @@ export function useNodeRunStatus(nodeId: string): NodeRunStatus {
 }
 
 /**
+ * Whether a step-by-step run is paused before the node `nodeId`: it is the next one to run. The
+ * component re-renders only when that changes.
+ */
+export function useIsPausedBefore(nodeId: string): boolean {
+  return useRunStore((state) => state.pausedNodeId === nodeId);
+}
+
+/**
  * What the current run did with an edge (see `EdgeFlow`). The component re-renders only when that
  * changes, not on every token the run streams.
  */

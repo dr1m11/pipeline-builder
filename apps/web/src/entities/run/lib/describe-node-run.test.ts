@@ -32,6 +32,13 @@ describe('describeNodeRun', () => {
     ).toBe('Run status: failed. Value is not valid JSON.');
   });
 
+  it('names the node a step-by-step run is paused before', () => {
+    expect(describeNodeRun({ status: 'queued', text: '' }, { paused: true })).toBe(
+      'Run status: next. The run is paused before this node.',
+    );
+    expect(describeNodeRun(IDLE_NODE_RUN, { paused: true })).toBe('');
+  });
+
   it('says why a node was skipped', () => {
     expect(describeNodeRun({ status: 'skipped', text: '', skipReason: 'branch-not-taken' })).toBe(
       'Run status: skipped, its branch was not taken.',
