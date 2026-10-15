@@ -62,11 +62,11 @@ function shownValues(node: PipelineNode, { text, outputs }: NodeRunState): Shown
   const ports = getNodePorts(node).outputs;
   if (outputs !== undefined) {
     return Object.entries(outputs).map(([portId, value]) => ({
-      label: ports.find((port) => port.id === portId)?.label ?? 'Result',
+      label: ports.find((port) => port.id === portId)?.label ?? 'result',
       text: formatRunValue(value),
     }));
   }
   if (text === '') return [];
   const [streamed] = ports;
-  return [{ label: `${streamed?.label ?? 'Response'} (so far)`, text }];
+  return [{ label: `${streamed?.label ?? 'response'} (so far)`, text }];
 }

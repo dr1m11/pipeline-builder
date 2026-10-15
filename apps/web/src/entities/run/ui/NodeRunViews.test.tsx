@@ -195,7 +195,7 @@ describe('NodeRunDetails', () => {
       status('answer', 'done'),
     ]);
 
-    expect(screen.getByRole('figure', { name: 'Result' })).toHaveTextContent('Blue.');
+    expect(screen.getByRole('figure', { name: 'result' })).toHaveTextContent('Blue.');
   });
 
   it('says why the node failed or was skipped', () => {
