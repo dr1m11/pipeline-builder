@@ -120,7 +120,11 @@ export const OPENAI_ERROR_BODIES = {
   400: '{"error":{"message":"Invalid \'max_output_tokens\' for the prompt \\"Why is the sky blue?\\": integer below minimum value.","type":"invalid_request_error","param":"max_output_tokens","code":"integer_below_min_value"}}',
   401: `{"error":{"message":"Incorrect API key provided: ${TEST_API_KEY}. You can find your API key at https://platform.openai.com/account/api-keys.","type":"invalid_request_error","param":null,"code":"invalid_api_key"}}`,
   403: '{"error":{"message":"Project does not have access to model gpt-6-luna.","type":"invalid_request_error","param":null,"code":"model_not_found"}}',
-  429: '{"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota","param":null,"code":"insufficient_quota"}}',
+  429: '{"error":{"message":"Rate limit reached for gpt-6-luna in organization org-123 on requests per min (RPM): Limit 500, Used 500, Requested 1.","type":"requests","param":null,"code":"rate_limit_exceeded"}}',
   500: '{"error":{"message":"The server had an error while processing your request. Sorry about that!","type":"server_error","param":null,"code":null}}',
   503: '{"error":{"message":"The engine is currently overloaded, please try again later.","type":"server_error","param":null,"code":null}}',
 } as const;
+
+/** The account of the key has used up its quota or credit (429 `insufficient_quota`). */
+export const OPENAI_QUOTA_BODY =
+  '{"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota","param":null,"code":"insufficient_quota"}}';

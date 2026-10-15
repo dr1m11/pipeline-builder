@@ -58,6 +58,8 @@ export function createOpenAiProvider(options?: UpstreamProviderOptions): Provide
       }),
       body: responsesRequest,
       createEventReader: createResponsesEventReader,
+      isBillingFailure: (error) =>
+        isQuotaFailure(stringField(error, 'code'), stringField(error, 'type')),
     },
     options,
   );
@@ -128,8 +130,16 @@ function endOfIncomplete(reason: string | undefined, wroteText: boolean): Upstre
 function failure(code: string | undefined, type: string | undefined): UpstreamStep {
   return {
     type: 'error',
-    error: upstreamError(TITLE, failureCode(code, type), { type: code ?? type }),
+    error: upstreamError(TITLE, failureCode(code, type), {
+      type: code ?? type,
+      billing: isQuotaFailure(code, type),
+    }),
   };
+}
+
+/** Whether the account of the key has used up its quota or credit (`insufficient_quota`). */
+function isQuotaFailure(code: string | undefined, type: string | undefined): boolean {
+  return code === 'insufficient_quota' || type === 'insufficient_quota';
 }
 
 /** What an error code or type of the Responses API means for the user. */

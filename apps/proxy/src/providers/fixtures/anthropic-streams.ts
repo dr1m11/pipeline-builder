@@ -125,8 +125,21 @@ data: {"type":"message_stop"}
 export const ANTHROPIC_ERROR_BODIES = {
   400: '{"type":"error","error":{"type":"invalid_request_error","message":"model: claude-haiku-9 was not found for the prompt \\"Why is the sky blue?\\""},"request_id":"req_011CSHoEeqs5C35K2UUqR7Fy"}',
   401: `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key: ${TEST_API_KEY}"},"request_id":"req_011CSHoEeqs5C35K2UUqR7Fz"}`,
+  402: '{"type":"error","error":{"type":"billing_error","message":"There is an issue with the billing or payment information of your account."},"request_id":"req_011CSHoEeqs5C35K2UUqR7G4"}',
   403: '{"type":"error","error":{"type":"permission_error","message":"Your API key does not have permission to use the specified resource."},"request_id":"req_011CSHoEeqs5C35K2UUqR7G0"}',
   429: '{"type":"error","error":{"type":"rate_limit_error","message":"Number of request tokens has exceeded your per-minute rate limit"},"request_id":"req_011CSHoEeqs5C35K2UUqR7G1"}',
   500: '{"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CSHoEeqs5C35K2UUqR7G2"}',
   529: '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"},"request_id":"req_011CSHoEeqs5C35K2UUqR7G3"}',
 } as const;
+
+/** A spend limit the organization set was reached (400, told apart only by its message). */
+export const ANTHROPIC_SPEND_LIMIT_BODY =
+  '{"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC."},"request_id":"req_011CSHoEeqs5C35K2UUqR7G5"}';
+
+/** The same for a workspace's spend limit. */
+export const ANTHROPIC_WORKSPACE_SPEND_LIMIT_BODY =
+  '{"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified workspace API usage limits. You will regain access on 2026-11-01 at 00:00 UTC."},"request_id":"req_011CSHoEeqs5C35K2UUqR7G6"}';
+
+/** The monthly spend cap of the usage tier was reached (429 without `retry-after`). */
+export const ANTHROPIC_SPEND_CAP_BODY =
+  '{"type":"error","error":{"type":"rate_limit_error","message":"You have reached your API usage limits: your organization has crossed its monthly API usage threshold, set based on your organization\'s API tier. You will regain access on 2026-11-01 at 00:00 UTC.","details":{"error_code":"enforced_spend_limit_reached"}},"request_id":"req_018EeWyXxfu5pfWkrYcMdjWG"}';

@@ -1,14 +1,16 @@
 import { LlmError, type LlmRequest } from '@pipeline-builder/core';
 import { describe, expect, it } from 'vitest';
 
-import { errorEvent, runProvider, TEST_API_KEY } from './fixtures/fake-upstream';
+import { errorEvent, type FakeAnswer, runProvider, TEST_API_KEY } from './fixtures/fake-upstream';
 import {
   OPENAI_ANSWER,
   OPENAI_CONTENT_FILTERED,
+  OPENAI_ERROR_BODIES,
   OPENAI_ERROR_EVENT,
   OPENAI_FAILED_MIDWAY,
   OPENAI_INCOMPLETE_AFTER_TEXT,
   OPENAI_INCOMPLETE_WHILE_REASONING,
+  OPENAI_QUOTA_BODY,
   OPENAI_REFUSAL,
 } from './fixtures/openai-streams';
 import {
@@ -27,8 +29,8 @@ const WITHOUT_SYSTEM: LlmRequest = {
 
 const REQUEST: LlmRequest = { ...WITHOUT_SYSTEM, system: 'Answer in one sentence.' };
 
-function run(body: string, request: LlmRequest = REQUEST) {
-  return runProvider(createOpenAiProvider, body, request);
+function run(answer: string | FakeAnswer, request: LlmRequest = REQUEST) {
+  return runProvider(createOpenAiProvider, answer, request);
 }
 
 describe('createOpenAiProvider', () => {
@@ -146,6 +148,43 @@ describe('createOpenAiProvider', () => {
       const { error } = await run(OPENAI_CONTENT_FILTERED);
 
       expect(error).toEqual(new LlmError('bad-request', 'OpenAI declined to answer this prompt.'));
+    });
+  });
+
+  describe('quota', () => {
+    it('points to billing when the account is out of quota', async () => {
+      const { error } = await run({ status: 429, body: [OPENAI_QUOTA_BODY] });
+
+      expect(error).toEqual(
+        new LlmError(
+          'rate-limited',
+          'OpenAI refused the request because the account of this API key is out of credit or over a spending limit (HTTP 429, insufficient_quota). Check its plan and billing.',
+        ),
+      );
+    });
+
+    it('asks to wait for a rate limit', async () => {
+      const { error } = await run({ status: 429, body: [OPENAI_ERROR_BODIES[429]] });
+
+      expect(error).toEqual(
+        new LlmError(
+          'rate-limited',
+          'OpenAI is limiting requests with this API key (HTTP 429, rate_limit_exceeded). Wait a minute and try again.',
+        ),
+      );
+    });
+
+    it('points to billing for an insufficient_quota error in the stream', async () => {
+      const { error } = await run(
+        errorEvent('{"type":"error","code":"insufficient_quota","message":"Quota","param":null}'),
+      );
+
+      expect(error).toEqual(
+        new LlmError(
+          'rate-limited',
+          'OpenAI refused the request because the account of this API key is out of credit or over a spending limit (insufficient_quota). Check its plan and billing.',
+        ),
+      );
     });
   });
 

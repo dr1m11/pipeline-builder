@@ -49,6 +49,20 @@ describe('upstreamError', () => {
     );
   });
 
+  it.each(['bad-request', 'rate-limited'] as const)(
+    'points to billing for a %s that the account cannot pay for',
+    (code) => {
+      expect(
+        upstreamError('Acme', code, { status: 402, type: 'billing_error', billing: true }),
+      ).toEqual(
+        new LlmError(
+          code,
+          'Acme refused the request because the account of this API key is out of credit or over a spending limit (HTTP 402, billing_error). Check its plan and billing.',
+        ),
+      );
+    },
+  );
+
   it('names only what it knows', () => {
     expect(upstreamError('Acme', 'upstream-error').message).toBe(
       'Acme failed to answer. Try again later.',

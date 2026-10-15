@@ -13,6 +13,11 @@ export type UpstreamFailureCode = Extract<
 export interface UpstreamFailure {
   readonly status?: number;
   readonly type?: string | undefined;
+  /**
+   * The account of the key cannot pay for the request: no credit or quota left, or a spending
+   * limit reached. The message then points to billing, whatever the code.
+   */
+  readonly billing?: boolean;
 }
 
 /**
@@ -40,7 +45,7 @@ const ERROR_TYPE_MAX_LENGTH = 64;
 export function upstreamError(
   title: string,
   code: UpstreamFailureCode,
-  { status, type }: UpstreamFailure = {},
+  { status, type, billing = false }: UpstreamFailure = {},
 ): LlmError {
   const facts = [
     ...(status === undefined ? [] : [`HTTP ${String(status)}`]),
@@ -49,7 +54,10 @@ export function upstreamError(
       : []),
   ];
   const said = facts.length === 0 ? '' : ` (${facts.join(', ')})`;
-  return new LlmError(code, upstreamMessage(title, code, said));
+  const message = billing
+    ? `${title} refused the request because the account of this API key is out of credit or over a spending limit${said}. Check its plan and billing.`
+    : upstreamMessage(title, code, said);
+  return new LlmError(code, message);
 }
 
 /** The provider declined to answer: a refusal, or its content filter stopped the answer. */

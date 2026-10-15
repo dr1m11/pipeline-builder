@@ -119,14 +119,14 @@ export interface ProviderRun {
 
 /**
  * Streams `request` from the provider `create` makes, with the test key, while a fake upstream
- * answers with the event stream `body`.
+ * answers with `answer`: an event stream, or a whole answer with its status.
  */
 export async function runProvider(
   create: (options: UpstreamProviderOptions) => Provider,
-  body: string,
+  answer: string | FakeAnswer,
   request: LlmRequest,
 ): Promise<ProviderRun> {
-  const upstream = createFakeUpstream({ body: [body] });
+  const upstream = createFakeUpstream(typeof answer === 'string' ? { body: [answer] } : answer);
   const provider = create({ fetch: upstream.fetch });
   const texts: string[] = [];
   let error: unknown;

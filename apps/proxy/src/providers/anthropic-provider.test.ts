@@ -8,12 +8,16 @@ import {
 } from './anthropic-provider';
 import {
   ANTHROPIC_ANSWER,
+  ANTHROPIC_ERROR_BODIES,
   ANTHROPIC_MAX_TOKENS_AFTER_TEXT,
   ANTHROPIC_MAX_TOKENS_WHILE_THINKING,
   ANTHROPIC_OVERLOADED_MIDWAY,
   ANTHROPIC_REFUSAL,
+  ANTHROPIC_SPEND_CAP_BODY,
+  ANTHROPIC_SPEND_LIMIT_BODY,
+  ANTHROPIC_WORKSPACE_SPEND_LIMIT_BODY,
 } from './fixtures/anthropic-streams';
-import { errorEvent, runProvider, TEST_API_KEY } from './fixtures/fake-upstream';
+import { errorEvent, type FakeAnswer, runProvider, TEST_API_KEY } from './fixtures/fake-upstream';
 
 const WITHOUT_SYSTEM: LlmRequest = {
   provider: 'anthropic',
@@ -25,8 +29,8 @@ const WITHOUT_SYSTEM: LlmRequest = {
 
 const REQUEST: LlmRequest = { ...WITHOUT_SYSTEM, system: 'Answer in one sentence.' };
 
-function run(body: string, request: LlmRequest = REQUEST) {
-  return runProvider(createAnthropicProvider, body, request);
+function run(answer: string | FakeAnswer, request: LlmRequest = REQUEST) {
+  return runProvider(createAnthropicProvider, answer, request);
 }
 
 describe('createAnthropicProvider', () => {
@@ -124,6 +128,61 @@ describe('createAnthropicProvider', () => {
 
       expect(error).toEqual(
         new LlmError('bad-request', 'Anthropic declined to answer this prompt.'),
+      );
+    });
+  });
+
+  describe('billing', () => {
+    it.each([
+      ['402 billing_error', 402, ANTHROPIC_ERROR_BODIES[402], 'bad-request', 'billing_error'],
+      ['a spend limit', 400, ANTHROPIC_SPEND_LIMIT_BODY, 'bad-request', 'invalid_request_error'],
+      [
+        "a workspace's spend limit",
+        400,
+        ANTHROPIC_WORKSPACE_SPEND_LIMIT_BODY,
+        'bad-request',
+        'invalid_request_error',
+      ],
+      ["the tier's monthly cap", 429, ANTHROPIC_SPEND_CAP_BODY, 'rate-limited', 'rate_limit_error'],
+    ] as const)('points to billing for %s', async (_case, status, body, code, type) => {
+      const { error } = await run({ status, body: [body] });
+
+      expect(error).toEqual(
+        new LlmError(
+          code,
+          `Anthropic refused the request because the account of this API key is out of credit or over a spending limit (HTTP ${String(status)}, ${type}). Check its plan and billing.`,
+        ),
+      );
+    });
+
+    it('keeps the usual messages for a bad request and a rate limit', async () => {
+      const badRequest = await run({ status: 400, body: [ANTHROPIC_ERROR_BODIES[400]] });
+      const rateLimit = await run({ status: 429, body: [ANTHROPIC_ERROR_BODIES[429]] });
+
+      expect(badRequest.error).toEqual(
+        new LlmError(
+          'bad-request',
+          'Anthropic rejected the request (HTTP 400, invalid_request_error). Check the model and Max tokens.',
+        ),
+      );
+      expect(rateLimit.error).toEqual(
+        new LlmError(
+          'rate-limited',
+          'Anthropic is limiting requests with this API key (HTTP 429, rate_limit_error). Wait a minute and try again.',
+        ),
+      );
+    });
+
+    it('points to billing for a billing_error event in the stream', async () => {
+      const { error } = await run(
+        errorEvent('{"type":"error","error":{"type":"billing_error","message":"Billing"}}'),
+      );
+
+      expect(error).toEqual(
+        new LlmError(
+          'bad-request',
+          'Anthropic refused the request because the account of this API key is out of credit or over a spending limit (billing_error). Check its plan and billing.',
+        ),
       );
     });
   });

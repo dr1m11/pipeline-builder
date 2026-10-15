@@ -1,4 +1,4 @@
-import { LLM_PROVIDER_INFO, type LlmRequest } from '@pipeline-builder/core';
+import { type JsonObject, LLM_PROVIDER_INFO, type LlmRequest } from '@pipeline-builder/core';
 
 import type { Provider } from './provider';
 import {
@@ -56,6 +56,7 @@ export function createAnthropicProvider(options?: UpstreamProviderOptions): Prov
       }),
       body: messagesRequest,
       createEventReader: createMessagesEventReader,
+      isBillingFailure,
     },
     options,
   );
@@ -115,11 +116,15 @@ function createMessagesEventReader(): UpstreamEventReader {
       case 'message_stop':
         return endOfMessage(stopReason, wroteText);
       case 'error': {
-        const type = stringField(objectField(parseJsonObject(data), 'error'), 'type');
+        const error = objectField(parseJsonObject(data), 'error');
+        const type = stringField(error, 'type');
         const status = type === undefined ? undefined : ERROR_TYPE_STATUS.get(type);
         return {
           type: 'error',
-          error: upstreamError(TITLE, errorCodeForStatus(status ?? 500), { type }),
+          error: upstreamError(TITLE, errorCodeForStatus(status ?? 500), {
+            type,
+            billing: isBillingFailure(error),
+          }),
         };
       }
       default:
@@ -127,6 +132,23 @@ function createMessagesEventReader(): UpstreamEventReader {
         return null;
     }
   };
+}
+
+// A spend limit set on the account answers 400 `invalid_request_error` with this message (or its
+// workspace variant); only the message tells it from other bad requests. It is matched, never
+// quoted (https://platform.claude.com/docs/en/api/rate-limits).
+const SPEND_LIMIT_MESSAGE = /^You have reached your specified (?:workspace )?API usage limits/;
+
+/**
+ * Whether an Anthropic error means the account cannot pay: 402 `billing_error`, a spend limit set
+ * on the account, or the usage tier's monthly cap (429 with `enforced_spend_limit_reached`).
+ */
+function isBillingFailure(error: JsonObject | undefined): boolean {
+  return (
+    stringField(error, 'type') === 'billing_error' ||
+    stringField(objectField(error, 'details'), 'error_code') === 'enforced_spend_limit_reached' ||
+    SPEND_LIMIT_MESSAGE.test(stringField(error, 'message') ?? '')
+  );
 }
 
 function endOfMessage(stopReason: string | undefined, wroteText: boolean): UpstreamStep {

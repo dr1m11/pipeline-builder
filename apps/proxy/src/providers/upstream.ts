@@ -1,5 +1,6 @@
 import {
   createSseParser,
+  type JsonObject,
   LLM_PROVIDER_INFO,
   LlmError,
   type LlmProvider,
@@ -56,6 +57,11 @@ export interface UpstreamApi {
    * (a ping, the model's thinking, metadata, an event it does not know) gives null.
    */
   readonly createEventReader: () => UpstreamEventReader;
+  /**
+   * Whether the `error` object of an error body says the account of the key cannot pay for the
+   * request (no credit or quota left, a spending limit reached), which no retry fixes.
+   */
+  readonly isBillingFailure: (error: JsonObject | undefined) => boolean;
 }
 
 // The abort reasons of the two timeouts, to tell them from a client disconnect.
@@ -111,6 +117,7 @@ export function createUpstreamProvider(
           url: api.url,
           headers: api.headers(apiKey),
           body: JSON.stringify(api.body(request)),
+          isBillingFailure: api.isBillingFailure,
         });
         for await (const text of readAnswer(
           body,
@@ -158,6 +165,7 @@ interface UpstreamRequest {
   readonly url: string;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: string;
+  readonly isBillingFailure: UpstreamApi['isBillingFailure'];
 }
 
 /** Sends the request and returns the body of the event stream that answers it. */
@@ -165,7 +173,7 @@ async function post(
   send: typeof fetch,
   title: string,
   signal: AbortSignal,
-  { url, headers, body }: UpstreamRequest,
+  { url, headers, body, isBillingFailure }: UpstreamRequest,
 ): Promise<ReadableStream<Uint8Array>> {
   let response: Response;
   try {
@@ -175,7 +183,7 @@ async function post(
     throw upstreamError(title, 'upstream-error');
   }
 
-  if (!response.ok) throw await statusError(response, title);
+  if (!response.ok) throw await statusError(response, title, isBillingFailure);
   if (!EVENT_STREAM_TYPE.test(response.headers.get('Content-Type') ?? '')) {
     cancel(response.body);
     throw upstreamError(title, 'upstream-error', { status: response.status });
@@ -186,9 +194,13 @@ async function post(
 
 /**
  * The error of a response with an error status. Anthropic and OpenAI both describe the failure in
- * `{ "error": { "type", "message" } }` (OpenAI adds a `code`); only the type or code is kept.
+ * `{ "error": { "type", "message" } }` (OpenAI adds a `code`); only the type or code is quoted.
  */
-async function statusError(response: Response, title: string): Promise<LlmError> {
+async function statusError(
+  response: Response,
+  title: string,
+  isBillingFailure: UpstreamApi['isBillingFailure'],
+): Promise<LlmError> {
   let text = '';
   try {
     text = await response.text();
@@ -199,6 +211,7 @@ async function statusError(response: Response, title: string): Promise<LlmError>
   return upstreamError(title, errorCodeForStatus(response.status), {
     status: response.status,
     type: stringField(error, 'code') ?? stringField(error, 'type'),
+    billing: isBillingFailure(error),
   });
 }
 
