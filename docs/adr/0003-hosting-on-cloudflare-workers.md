@@ -18,7 +18,7 @@ Picking a host only for the static SPA would mean a second (and maybe third) pla
 - **Production** deploys on every push to `main` (`wrangler deploy`), then a smoke request checks a deep link.
 - **PR previews** via `wrangler versions upload --preview-alias pr-<number>`: a stable URL per PR that updates on every push, posted as a sticky PR comment. Worker Previews (`wrangler preview`) are in open beta; revisit when they are stable.
 - **Storybook on GitHub Pages**, deployed from `main` by Actions — a `github.io` link with no extra Worker.
-- **Later stages:** the proxy becomes a Worker in `apps/proxy` (Hono runs natively on Workers; SSE streaming and the rate-limiting binding are built in). Yjs collaboration can use Durable Objects. Whether the proxy shares the SPA origin (route `/api/*`) or gets its own will be decided in A5.
+- **Later stages:** the proxy becomes a Worker in `apps/proxy` (Hono runs natively on Workers; SSE streaming and the rate-limiting binding are built in). Yjs collaboration can use Durable Objects. Whether the proxy shares the SPA origin (route `/api/*`) or gets its own will be decided in A5. _Decided in [ADR 0012](./0012-llm-proxy-same-origin-worker.md): the proxy is the script of this same Worker, on `/api/*`, and the Worker config moved to `apps/proxy/wrangler.jsonc`._
 
 ## Consequences
 

@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // One Worker serves the SPA and the API (docs/adr/0012): static assets come from the web build,
+  // and this script runs first only for /api/*. Run `pnpm cf-typegen` after changing bindings.
+  "name": "pipeline-builder",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-10-12",
+  "workers_dev": true,
+  "preview_urls": true,
+  // Vite forwards /api/ here in dev. A fixed port makes `wrangler dev` fail when it is taken,
+  // instead of moving to the next free port where Vite would not find it.
+  "dev": { "port": 8787 },
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  // Counted per client IP in each Cloudflare location. Every LLM request takes from the first;
+  // a request to a real provider also takes from the second, stricter one.
+  "ratelimits": [
+    {
+      "name": "LLM_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 30, "period": 10 },
+    },
+    {
+      "name": "REAL_PROVIDER_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 },
+    },
+  ],
+}

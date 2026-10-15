@@ -5,6 +5,7 @@ import { AI_ATTRIBUTION_RE } from './.claude/hooks/_lib.mjs';
 const SCOPES = [
   'web',
   'core',
+  'proxy',
   'ui',
   'canvas',
   'storybook',

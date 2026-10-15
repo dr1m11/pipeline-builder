@@ -16,3 +16,4 @@ Create a new one from [`template.md`](./template.md) with the next four-digit nu
 | [0009](./0009-undo-redo-commands-with-snapshot-history.md)       | Undo/redo: commands with snapshot history                        | Accepted |
 | [0010](./0010-pipeline-files-and-schema-migrations.md)           | Pipeline files and schema migrations                             | Accepted |
 | [0011](./0011-pipeline-execution-engine.md)                      | Pipeline execution engine                                        | Accepted |
+| [0012](./0012-llm-proxy-same-origin-worker.md)                   | LLM proxy: same-origin Worker, stream protocol, keys and limits  | Accepted |

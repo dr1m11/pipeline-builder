@@ -66,6 +66,10 @@ jobs:
 
       - name: Vite production build
         run: pnpm build
+      # Renovate and fork PRs get no preview deploy, so check here that the Worker bundles.
+      - name: Bundle the Worker (dry run)
+        working-directory: apps/proxy
+        run: pnpm exec wrangler deploy --dry-run
       - name: Upload build
         uses: actions/upload-artifact@v7
         with:

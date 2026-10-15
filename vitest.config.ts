@@ -11,13 +11,22 @@ export default defineConfig({
           environment: 'node',
         },
       },
+      {
+        // The Worker's code runs on workerd; its tests call the Hono app in Node with fake bindings.
+        test: {
+          name: 'proxy',
+          root: './apps/proxy',
+          include: ['src/**/*.test.ts'],
+          environment: 'node',
+        },
+      },
       'apps/web/vitest.config.ts',
       'apps/web/vitest.storybook.config.ts',
     ],
     coverage: {
       provider: 'v8',
       // Vitest 5 matches include/exclude against paths relative to each project's root
-      // (packages/core, apps/web), so these patterns cover the sources of both projects.
+      // (packages/core, apps/proxy, apps/web), so these patterns cover the sources of all three.
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['**/*.test.{ts,tsx}', '**/*.stories.tsx', '**/index.ts', 'src/main.tsx'],
       reporter: ['text', 'html', 'json-summary', 'json'],

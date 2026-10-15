@@ -7,12 +7,12 @@ Product scope: `docs/product-spec.md`. Stages and current stage: `docs/roadmap.m
 
 | Command                            | What it does                                                                                               |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                         | Vite dev server for `apps/web`                                                                             |
+| `pnpm dev`                         | Vite dev server for `apps/web` plus `wrangler dev` of `apps/proxy` on :8787 (Vite proxies `/api/` to it)   |
 | `pnpm verify`                      | format check → lint → Steiger → typecheck → unit tests → hook tests → build. **Must be green before a PR** |
 | `pnpm verify:full`                 | `verify` + Storybook tests + Playwright e2e                                                                |
 | `pnpm lint` / `pnpm lint:fsd`      | ESLint / Steiger (FSD boundaries)                                                                          |
 | `pnpm typecheck`                   | `tsc` across the workspace                                                                                 |
-| `pnpm test` / `pnpm test:coverage` | Vitest projects `core` + `web` (core coverage gate 80%)                                                    |
+| `pnpm test` / `pnpm test:coverage` | Vitest projects `core` + `proxy` + `web` (core coverage gate 80%)                                          |
 | `pnpm test:storybook`              | Stories as tests in Vitest browser mode                                                                    |
 | `pnpm test:e2e`                    | Playwright against `vite preview`                                                                          |
 | `pnpm storybook`                   | Storybook on :6006 (also enables the `storybook` MCP server)                                               |
@@ -22,7 +22,7 @@ Product scope: `docs/product-spec.md`. Stages and current stage: `docs/roadmap.m
 
 - `apps/web` — React 19 SPA, Feature-Sliced Design. Deployed to Cloudflare Workers static assets.
 - `packages/core` — framework-free domain: graph model, validation, engine, undo commands, migrations.
-- `apps/proxy` — Hono SSE proxy on Workers (arrives in A5).
+- `apps/proxy` — Hono LLM proxy (SSE): the script of the same Worker that serves the SPA, on `/api/*` (ADR 0012).
 
 ## Architecture rules
 
