@@ -56,7 +56,6 @@ export function editor(page: Page) {
     undoButton: editToolbar.getByRole('button', { name: /^Undo\b/ }),
     /** Named after the change it redoes, or just "Redo" with none. */
     redoButton: editToolbar.getByRole('button', { name: /^Redo\b/ }),
-    runToolbar,
     /**
      * Runs the pipeline. Unavailable buttons stay focusable, so Run and Stop are marked with
      * `aria-disabled`, and Run is described by why it cannot run ("Fix 1 error to run").
@@ -76,7 +75,6 @@ export function editor(page: Page) {
       node(nodeName).getByRole('textbox', { name: `${nodeName} ${valueName}`, exact: true }),
     /** The inspector's account of what the run did to the selected node, with its full values. */
     runOutput: inspector.getByRole('region', { name: 'Run output' }),
-    apiKeysButton: page.getByRole('button', { name: 'API keys', exact: true }),
     apiKeysDialog: page.getByRole('dialog', { name: 'API keys' }),
     shortcutsButton: page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }),
     shortcutsHelp: page.getByRole('dialog', { name: 'Keyboard shortcuts' }),

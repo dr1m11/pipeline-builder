@@ -1,5 +1,3 @@
-import { fileURLToPath } from 'node:url';
-
 import { defineConfig, devices } from '@playwright/test';
 
 const isCI = Boolean(process.env.CI);
@@ -30,7 +28,8 @@ export default defineConfig({
   // the runtime reporting the client's disconnect, not a failure.
   webServer: {
     command: `pnpm exec wrangler dev --ip 127.0.0.1 --port ${String(port)}`,
-    cwd: fileURLToPath(new URL('../proxy', import.meta.url)),
+    // Resolved against this file's directory.
+    cwd: '../proxy',
     url: `${baseURL}/api/health`,
     reuseExistingServer: !isCI,
     timeout: 60_000,
