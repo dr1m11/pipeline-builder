@@ -14,6 +14,7 @@ export function editor(page: Page) {
   const inspector = page.getByRole('complementary', { name: 'Inspector' });
   const fileToolbar = page.getByRole('toolbar', { name: 'File' });
   const editToolbar = page.getByRole('toolbar', { name: 'Edit' });
+  const runToolbar = page.getByRole('toolbar', { name: 'Run' });
   const notifications = page.getByRole('region', { name: 'Notifications (F8)' });
 
   // Nodes and edges are both groups, named exactly: a node by its label, an edge after its nodes
@@ -55,6 +56,26 @@ export function editor(page: Page) {
     undoButton: editToolbar.getByRole('button', { name: /^Undo\b/ }),
     /** Named after the change it redoes, or just "Redo" with none. */
     redoButton: editToolbar.getByRole('button', { name: /^Redo\b/ }),
+    /**
+     * Runs the pipeline. Unavailable buttons stay focusable, so Run and Stop are marked with
+     * `aria-disabled`, and Run is described by why it cannot run ("Fix 1 error to run").
+     */
+    runButton: runToolbar.getByRole('button', { name: 'Run', exact: true }),
+    stopButton: runToolbar.getByRole('button', { name: 'Stop', exact: true }),
+    /**
+     * The run's live region: "Run started", then "Run finished: 4 nodes done", "Run stopped" or
+     * "Run failed"; or why the pipeline cannot run.
+     */
+    runStatus: runToolbar.getByRole('status'),
+    /**
+     * What a node shows of its run on its card, as a read-only text field: the text an LLM Call
+     * streams ("Model response") or the value an Output gets ("Answer result").
+     */
+    runPreview: (nodeName: string, valueName: 'response' | 'result') =>
+      node(nodeName).getByRole('textbox', { name: `${nodeName} ${valueName}`, exact: true }),
+    /** The inspector's account of what the run did to the selected node, with its full values. */
+    runOutput: inspector.getByRole('region', { name: 'Run output' }),
+    apiKeysDialog: page.getByRole('dialog', { name: 'API keys' }),
     shortcutsButton: page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }),
     shortcutsHelp: page.getByRole('dialog', { name: 'Keyboard shortcuts' }),
     /** Every toast on screen. */
