@@ -32,8 +32,8 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@commitlint/cli": "21.2.3",
-    "@commitlint/config-conventional": "21.2.3",
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4",
     "@eslint-react/eslint-plugin": "5.26.1",
     "@eslint/js": "10.0.1",
     "@types/node": "catalog:",
