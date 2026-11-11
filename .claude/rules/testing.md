@@ -13,6 +13,6 @@ paths:
 - User interaction via `const user = userEvent.setup()` and `await user.click(...)`, not `fireEvent`.
 - No snapshot tests of markup. Assert on behaviour and accessible output.
 - Mock at module boundaries only (network, workers, time). Use `vi.useFakeTimers()` for time-based logic and restore afterwards.
-- Playwright e2e: import `test`/`expect` from `e2e/fixtures.ts` — it fails the test on console errors and provides `expectNoA11yViolations()`.
+- Playwright e2e: import `test`/`expect` from `e2e/fixtures.ts` — it fails the test on console errors and provides `expectNoA11yViolations()`. A test that expects a console error (the browser logs a failed response it fakes) allows it with `allowConsoleErrors(pattern)`, as narrowly as it can.
 - Locate elements with `getByRole`/`getByLabel`; never use `waitForTimeout`, wait for state with web-first assertions.
 - Keep e2e scenarios few and end-to-end (user journeys from `docs/product-spec.md`); push edge cases down to unit tests.

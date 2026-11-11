@@ -93,7 +93,9 @@ jobs:
           path: apps/web/dist/
       - uses: ./.github/actions/playwright
 
-      - name: Run Playwright against the production build
+      # Playwright starts `wrangler dev` in apps/proxy (installed by the setup step, workerd
+      # included): the Worker serves this build and the API on one origin, as deployed.
+      - name: Run Playwright against the Worker serving the production build
         run: pnpm test:e2e
       - name: Upload Playwright report
         if: failure()
