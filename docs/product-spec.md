@@ -54,11 +54,11 @@ Key scenarios:
 
 **Execution**
 
-- Engine: topological sort, parallel execution of independent branches, node statuses (idle, queued, running, done, error, cancelled).
+- Engine: nodes run in dependency order as soon as their inputs are ready, independent branches in parallel, with node statuses (idle, queued, running, done, error, cancelled, skipped). A node is skipped when an input it is connected to gets no value: below a Condition branch that was not taken, or below a failed node. A failure stops only the nodes that need its result. Details: [ADR 0011](./adr/0011-pipeline-execution-engine.md).
 - Step-by-step simulation mode highlighting the active node.
-- Mock provider by default: streams fake tokens over SSE, works without a key.
-- Real providers, Anthropic and OpenAI, through a dedicated SSE proxy (Hono). The user's key lives only in the browser and is never stored on the server: entered in the API keys dialog, it is kept for the browser session, or on the device when the user chooses "Remember on this device", and never enters a pipeline, its autosaved draft or an exported file. Providers and their default models: [ADR 0005](./adr/0005-node-catalogue-and-typed-ports.md).
-- Token streaming into the node, cancellation via AbortController, error and timeout handling.
+- Mock provider by default: streams sample answers over SSE through the same proxy as real models, works without a key, and answers the built-in templates sensibly (a sentiment word, a JSON object with a name and an email, or a short markdown answer).
+- Real providers, Anthropic and OpenAI, through a dedicated SSE proxy (Hono) on the app's own origin. The user's key lives only in the browser and is never stored on the server: entered in the API keys dialog, it is kept in `sessionStorage` for the browser session, or in `localStorage` when the user chooses "Remember on this device", and never enters a pipeline, its autosaved draft or an exported file. Providers and their default models: [ADR 0005](./adr/0005-node-catalogue-and-typed-ports.md); the proxy: [ADR 0012](./adr/0012-llm-proxy-same-origin-worker.md).
+- Tokens stream into the LLM Call node's card, and an Output's card shows the value it got; every other node shows its status only, and the inspector shows the full values of the selected node. Stop cancels the run through an AbortController, which also stops the request to the provider. A failure is shown on its node and in a toast; a rejected key leads back to the API keys dialog. The proxy times out a provider that sends no text within 30 seconds or no end within 5 minutes.
 
 **Collaboration** (last stage)
 
